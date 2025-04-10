@@ -1,46 +1,69 @@
 import os
+import logging
 import boto3
 from uuid import uuid4
 from botocore.exceptions import NoCredentialsError, ClientError
 from io import BytesIO
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException, UploadFile, status
 from starlette.concurrency import run_in_threadpool
-import logging
-from app.core.config import AWS_S3_BUCKET_NAME, AWS_CLOUDFRONT_URL
+import base64
+
+# Try to load .env only in development
+try:
+    # Check if we're in a Lambda environment
+    if os.environ.get('AWS_LAMBDA_FUNCTION_NAME') is None:
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+            print("Loaded .env file for local development")
+        except ImportError:
+            print("dotenv module not found. Skipping .env loading.")
+        except Exception as e:
+            print(f"Warning: Error loading .env file: {str(e)}")
+
+except Exception as e:
+    print(f"Error checking environment: {str(e)}")
 
 # Set up logger
 logger = logging.getLogger(__name__)
 
 # Get AWS configuration from environment
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
-AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_REGION = os.getenv("AWS_REGION")
+AWS_S3_BUCKET_NAME = os.getenv("AWS_S3_BUCKET_NAME") or os.getenv("AWS_BUCKET_NAME")
+AWS_CLOUDFRONT_URL = os.getenv("AWS_CLOUDFRONT_URL")
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 
-# Log configuration status (without exposing secrets)
-if AWS_ACCESS_KEY and AWS_SECRET_KEY:
-    logger.info(f"AWS credentials found in environment variables")
-else:
-    logger.warning(f"AWS credentials not found in environment variables. Falling back to AWS config file or IAM role.")
+# Log configuration status (for debugging, without exposing secrets)
+logger.info(f"AWS Configuration - Region: {'Set' if AWS_REGION else 'Not Set'}")
+logger.info(f"AWS Configuration - Bucket: {'Set' if AWS_S3_BUCKET_NAME else 'Not Set'}")
+logger.info(f"AWS Configuration - CloudFront: {'Set' if AWS_CLOUDFRONT_URL else 'Not Set'}")
+logger.info(f"AWS Configuration - Access Key ID: {'Set' if AWS_ACCESS_KEY_ID else 'Not Set'}")
+logger.info(f"AWS Configuration - Secret Key: {'Set' if AWS_SECRET_ACCESS_KEY else 'Not Set'}")
 
+# Initialize S3 client based on environment
+s3_client = None
 try:
-    # Initialize S3 client with explicit credentials if available
-    if AWS_ACCESS_KEY and AWS_SECRET_KEY:
-        s3_client = boto3.client(
-            's3',
-            region_name=AWS_REGION,
-            aws_access_key_id=AWS_ACCESS_KEY,
-            aws_secret_access_key=AWS_SECRET_KEY
-        )
-    else:
-        # Fall back to credentials file or IAM role
+    # Check if running in AWS Lambda or EC2 (with IAM role)
+    if os.environ.get('AWS_LAMBDA_FUNCTION_NAME') or not (AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY):
+        logger.info("Running in AWS environment with IAM role or Lambda execution role")
         s3_client = boto3.client('s3', region_name=AWS_REGION)
-        
-    # Test the connection
-    s3_client.list_buckets()
-    logger.info(f"S3 client successfully initialized with region: {AWS_REGION}, bucket: {AWS_S3_BUCKET_NAME}")
+    else:
+        # Using explicit credentials
+        logger.info("Using explicit AWS credentials from environment variables")
+        s3_client = boto3.client(
+            "s3",
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+            region_name=AWS_REGION,
+        )
+    
+    # Test connection
+    response = s3_client.list_buckets()
+    logger.info(f"Successfully connected to AWS S3. Buckets: {len(response['Buckets'])}")
 except Exception as e:
-    logger.error(f"Failed to initialize or test S3 client: {str(e)}")
-    s3_client = None
+    logger.error(f"Failed to initialize S3 client: {str(e)}")
+    # Don't set s3_client to None - keep the instance for simplified error handling
 
 async def upload_image_to_s3(file: UploadFile, folder="profiles") -> str:
     """
@@ -51,11 +74,19 @@ async def upload_image_to_s3(file: UploadFile, folder="profiles") -> str:
         logger.info(f"Uploading file to S3: {file.filename}, content_type: {file.content_type}")
             
         # Check if S3 client is initialized
-        if not s3_client:
+        if s3_client is None:
             logger.error("S3 client is not initialized")
             raise HTTPException(
-                status_code=500,
-                detail="S3 service is not properly configured. Check AWS credentials."
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="AWS S3 client not initialized. Check AWS credentials and region settings."
+            )
+        
+        # Check if required AWS variables are set
+        if not AWS_S3_BUCKET_NAME:
+            logger.error("AWS S3 bucket name not configured")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="AWS_S3_BUCKET_NAME environment variable is missing"
             )
             
         file_extension = file.filename.split(".")[-1]
@@ -90,10 +121,14 @@ async def upload_image_to_s3(file: UploadFile, folder="profiles") -> str:
             else f"https://{AWS_S3_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{unique_filename}"
         )
         logger.info(f"File uploaded successfully. URL: {url}")
-        return unique_filename.split('/')[-1]  # Return just the filename
+        return url
 
     except NoCredentialsError:
         error_msg = "AWS credentials are invalid or not found. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables."
+        logger.error(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+    except ClientError as e:
+        error_msg = f"AWS client error: {str(e)}"
         logger.error(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
     except Exception as e:
@@ -108,27 +143,25 @@ async def upload_base64_image_to_s3(base64_image: str, file_extension: str = "jp
     Upload a base64 encoded image to S3
     """
     try:
-        import base64
-        
         # Log the upload attempt
         logger.info(f"Uploading base64 image to S3 with extension: {file_extension}")
             
         # Check if S3 client is initialized
-        if not s3_client:
+        if s3_client is None:
             logger.error("S3 client is not initialized")
             raise HTTPException(
-                status_code=500,
-                detail="S3 service is not properly configured. Check AWS credentials."
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="AWS S3 client not initialized. Check AWS credentials and region settings."
             )
         
-        # Check if AWS_S3_BUCKET_NAME is configured
+        # Check if required AWS variables are set
         if not AWS_S3_BUCKET_NAME:
-            logger.error("AWS_S3_BUCKET_NAME is not configured")
+            logger.error("AWS S3 bucket name not configured")
             raise HTTPException(
-                status_code=500,
-                detail="S3 bucket name is not configured. Set AWS_S3_BUCKET_NAME environment variable."
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="AWS_S3_BUCKET_NAME environment variable is missing"
             )
-            
+        
         # Decode base64 string
         if "base64," in base64_image:
             base64_image = base64_image.split("base64,")[1]
@@ -162,26 +195,35 @@ async def upload_base64_image_to_s3(base64_image: str, file_extension: str = "jp
         # Get the appropriate content type or default to generic image
         content_type = content_type_map.get(file_extension.lower(), f"image/{file_extension}")
         
-        # For debugging purposes
-        logger.info(f"Uploading to bucket: {AWS_S3_BUCKET_NAME}, key: {unique_filename}")
-            
-        await run_in_threadpool(
-            s3_client.upload_fileobj,
-            file_stream,
-            AWS_S3_BUCKET_NAME,
-            unique_filename,
-            ExtraArgs={"ContentType": content_type}
-        )
+        logger.info(f"Attempting to upload to S3 bucket: {AWS_S3_BUCKET_NAME}, key: {unique_filename}")
+        
+        try:
+            await run_in_threadpool(
+                s3_client.upload_fileobj,
+                file_stream,
+                AWS_S3_BUCKET_NAME,
+                unique_filename,
+                ExtraArgs={"ContentType": content_type}
+            )
+        except Exception as e:
+            logger.error(f"S3 upload operation failed: {str(e)}")
+            raise
 
-        logger.info(f"Base64 image uploaded successfully as: {unique_filename}")
-        return unique_filename.split('/')[-1]  # Return just the filename without the folder
+        # Generate the URL based on CloudFront availability
+        url = (
+            f"{AWS_CLOUDFRONT_URL}/{unique_filename}"
+            if AWS_CLOUDFRONT_URL
+            else f"https://{AWS_S3_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{unique_filename}"
+        )
+        logger.info(f"Base64 image uploaded successfully. URL: {url}")
+        return url
 
     except NoCredentialsError:
-        error_msg = "AWS credentials are invalid or not found. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables."
+        error_msg = "AWS credentials are invalid or not found."
         logger.error(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
     except ClientError as e:
-        error_msg = f"AWS S3 client error: {str(e)}"
+        error_msg = f"AWS client error: {str(e)}"
         logger.error(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
     except Exception as e:
@@ -197,15 +239,21 @@ async def delete_file(filename: str, folder="profiles") -> bool:
         logger.info(f"Deleting file from S3: {filename}")
             
         # Check if S3 client is initialized
-        if not s3_client:
+        if s3_client is None:
             logger.error("S3 client is not initialized")
             raise HTTPException(
-                status_code=500,
-                detail="S3 service is not properly configured. Check AWS credentials."
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="AWS S3 client not initialized. Check AWS credentials and region settings."
             )
+        
+        # If the filename is a full URL, extract just the filename part
+        if filename.startswith(('http://', 'https://')):
+            filename = filename.split('/')[-1]
         
         # Construct the full key with folder
         key = f"{folder}/{filename}"
+        
+        logger.info(f"Deleting S3 object: bucket={AWS_S3_BUCKET_NAME}, key={key}")
         
         # Delete the file using async wrapper
         await run_in_threadpool(
@@ -224,4 +272,16 @@ async def delete_file(filename: str, folder="profiles") -> bool:
     except Exception as e:
         error_msg = f"Unexpected error deleting file: {str(e)}"
         logger.error(error_msg)
-        raise HTTPException(status_code=500, detail=error_msg) 
+        raise HTTPException(status_code=500, detail=error_msg)
+
+def is_url(text):
+    """
+    Check if a string is a URL
+    
+    Args:
+        text (str): Text to check
+        
+    Returns:
+        bool: True if text is a URL, False otherwise
+    """
+    return text and isinstance(text, str) and text.startswith(('http://', 'https://')) 
