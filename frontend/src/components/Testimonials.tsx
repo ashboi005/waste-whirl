@@ -1,28 +1,40 @@
-const testimonials = [
-  { name: "Rajesh Kumar", image: "1.png", text: "The service provided was exceptional..." },
-  { name: "Anita Sharma", image: "5.png", text: "An amazing experience from start to finish..." },
-  { name: "Vijay Singh", image: "2.png", text: "Extremely satisfied with the service..." },
-  { name: "Priya Patel", image: "6.png", text: "The team did a fantastic job..." },
-  { name: "Arun Das", image: "3.png", text: "A seamless and hassle-free experience..." },
-  { name: "Sunita Mehta", image: "7.png", text: "Very pleased with the service..." },
-  { name: "Ravi Gupta", image: "4.png", text: "Outstanding service from start to finish..." },
-  { name: "Neha Verma", image: "8.png", text: "Excellent service and very professional staff..." },
-];
-
+'use client';
 export default function Testimonials() {
   return (
-    <section id="Testimonials">
-      <h2>Testimonials</h2>
-      <div className="testimonials-container">
-        {testimonials.map((t, idx) => (
-          <div className="testimonial-card" key={idx}>
-            <div className="header">
-              <img className="avatar" src={`/static/images/${t.image}`} alt={t.name} />
-              <div className="name">{t.name}</div>
-            </div>
-            <div className="content">{t.text}</div>
+    <section id="Testimonials" className="py-[60px] bg-[#f8f8f8]">
+      <h2 className="mb-[40px] text-[2rem] text-center font-bold">Testimonials</h2>
+      <div className="grid grid-cols-4 gap-6 max-w-6xl mx-auto px-4 lg:grid-cols-2 md:grid-cols-1">
+        <div className="bg-white rounded-lg p-6 shadow-md min-h-[300px] transition-all duration-300 hover:shadow-lg hover:translate-y-[-5px]">
+          <div className="flex flex-col items-center mb-4">
+            <img src="/images/1.png" alt="Avatar" className="w-[60px] h-[60px] rounded-full mb-2" />
+            <p className="font-bold">John Doe</p>
           </div>
-        ))}
+          <p className="text-center text-gray-700">I was amazed at how easy it was to sell my old newspapers and bottles. The pickup was on time and the payment was instant!</p>
+        </div>
+
+        <div className="bg-white rounded-lg p-6 shadow-md min-h-[300px] transition-all duration-300 hover:shadow-lg hover:translate-y-[-5px]">
+          <div className="flex flex-col items-center mb-4">
+            <img src="/images/2.png" alt="Avatar" className="w-[60px] h-[60px] rounded-full mb-2" />
+            <p className="font-bold">Jane Smith</p>
+          </div>
+          <p className="text-center text-gray-700">Waste Whirl has made recycling a rewarding habit. I love that I can contribute to the environment while making some extra cash.</p>
+        </div>
+
+        <div className="bg-white rounded-lg p-6 shadow-md min-h-[300px] transition-all duration-300 hover:shadow-lg hover:translate-y-[-5px]">
+          <div className="flex flex-col items-center mb-4">
+            <img src="/images/3.png" alt="Avatar" className="w-[60px] h-[60px] rounded-full mb-2" />
+            <p className="font-bold">Robert Johnson</p>
+          </div>
+          <p className="text-center text-gray-700">The staff was professional and polite. The whole process was seamless, and I received a fair price for my recyclables.</p>
+        </div>
+
+        <div className="bg-white rounded-lg p-6 shadow-md min-h-[300px] transition-all duration-300 hover:shadow-lg hover:translate-y-[-5px]">
+          <div className="flex flex-col items-center mb-4">
+            <img src="/images/4.png" alt="Avatar" className="w-[60px] h-[60px] rounded-full mb-2" />
+            <p className="font-bold">Emily Chen</p>
+          </div>
+          <p className="text-center text-gray-700">I've tried other recycling services, but Waste Whirl offers the best rates and the most convenient pickup options by far!</p>
+        </div>
       </div>
     </section>
   );
