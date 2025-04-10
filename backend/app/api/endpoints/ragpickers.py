@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.db.database import get_db
-from app.models.user import User, RagpickerDetails, Balances, Reviews
-from app.schemas.ragpicker import RagpickerDetailsCreate, RagpickerDetailsResponse, RagpickerListResponse, RagpickerBalanceResponse
+from app.models.user import User, RagpickerDetails, Balances, Reviews, UserDetails
+from app.schemas.ragpicker import RagpickerDetailsCreate, RagpickerDetailsUpdate, RagpickerDetailsResponse, RagpickerListResponse, RagpickerBalanceResponse
 from typing import List
 import logging
 
@@ -29,16 +29,18 @@ async def get_ragpickers(skip: int = 0, limit: int = 100, db: AsyncSession = Dep
     
     response_list = []
     for user, details in ragpickers:
-        # If ragpicker details don't exist yet, use default values
-        avg_rating = details.average_rating if details else 0.0
+        # If ragpicker details don't exist or average_rating is None, use default 0.0
+        avg_rating = 0.0
+        if details and details.average_rating is not None:
+            avg_rating = details.average_rating
         
         # Get profile pic URL from user details if available
         profile_pic_url = None
-        user_details_query = select(User).where(User.clerkId == user.clerkId)
+        user_details_query = select(UserDetails).where(UserDetails.clerkId == user.clerkId)
         user_details_result = await db.execute(user_details_query)
         user_details = user_details_result.scalars().first()
         if user_details:
-            profile_pic_url = getattr(user_details, 'profile_pic_url', None)
+            profile_pic_url = user_details.profile_pic_url
             
         response_list.append(
             RagpickerListResponse(
@@ -55,7 +57,7 @@ async def get_ragpickers(skip: int = 0, limit: int = 100, db: AsyncSession = Dep
 @router.post("/{clerk_id}/details", response_model=RagpickerDetailsResponse)
 async def create_ragpicker_details(clerk_id: str, details: RagpickerDetailsCreate, db: AsyncSession = Depends(get_db)):
     """
-    Create or update ragpicker details
+    Create ragpicker details with only wallet address. RFID is set to None by default.
     """
     # Check if user exists
     result = await db.execute(select(User).where(User.clerkId == clerk_id))
@@ -79,29 +81,35 @@ async def create_ragpicker_details(clerk_id: str, details: RagpickerDetailsCreat
     existing_details = result.scalars().first()
     
     if existing_details:
-        # Update existing details
+        # Update existing details wallet address, leave other fields unchanged
         existing_details.wallet_address = details.wallet_address
-        existing_details.RFID = details.RFID
-        existing_details.average_rating = details.average_rating
+        # Make sure average_rating is never None
+        if existing_details.average_rating is None:
+            existing_details.average_rating = 0.0
         ragpicker_details = existing_details
     else:
-        # Create new ragpicker details
+        # Create new ragpicker details with wallet address only
         ragpicker_details = RagpickerDetails(
             clerkId=clerk_id,
             wallet_address=details.wallet_address,
-            RFID=details.RFID,
-            average_rating=details.average_rating
+            RFID=None,  # Set to None explicitly
+            average_rating=0.0  # Default to 0.0
         )
         db.add(ragpicker_details)
     
     await db.commit()
     await db.refresh(ragpicker_details)
     
+    # Ensure average_rating is always valid for the response
+    avg_rating = 0.0
+    if ragpicker_details.average_rating is not None:
+        avg_rating = ragpicker_details.average_rating
+    
     return RagpickerDetailsResponse(
         clerkId=ragpicker_details.clerkId,
         wallet_address=ragpicker_details.wallet_address,
         RFID=ragpicker_details.RFID,
-        average_rating=ragpicker_details.average_rating
+        average_rating=avg_rating
     )
 
 @router.get("/{clerk_id}/details", response_model=RagpickerDetailsResponse)
@@ -129,17 +137,23 @@ async def get_ragpicker_details(clerk_id: str, db: AsyncSession = Depends(get_db
             detail=f"Ragpicker details for clerk ID {clerk_id} not found"
         )
     
+    # Ensure average_rating is always a valid float
+    avg_rating = 0.0
+    if ragpicker_details.average_rating is not None:
+        avg_rating = ragpicker_details.average_rating
+    
     return RagpickerDetailsResponse(
         clerkId=ragpicker_details.clerkId,
         wallet_address=ragpicker_details.wallet_address,
         RFID=ragpicker_details.RFID,
-        average_rating=ragpicker_details.average_rating
+        average_rating=avg_rating
     )
 
 @router.put("/{clerk_id}/details", response_model=RagpickerDetailsResponse)
-async def update_ragpicker_details(clerk_id: str, details: RagpickerDetailsCreate, db: AsyncSession = Depends(get_db)):
+async def update_ragpicker_details(clerk_id: str, details: RagpickerDetailsUpdate, db: AsyncSession = Depends(get_db)):
     """
-    Update ragpicker details by clerk ID
+    Update ragpicker details: wallet address and RFID.
+    Average rating is managed separately through reviews.
     """
     # Check if user exists
     result = await db.execute(select(User).where(User.clerkId == clerk_id))
@@ -169,18 +183,29 @@ async def update_ragpicker_details(clerk_id: str, details: RagpickerDetailsCreat
         )
     
     # Update fields
-    ragpicker_details.wallet_address = details.wallet_address
-    ragpicker_details.RFID = details.RFID
+    if details.wallet_address is not None:
+        ragpicker_details.wallet_address = details.wallet_address
+    if details.RFID is not None:
+        ragpicker_details.RFID = details.RFID
     # Don't update average_rating through this endpoint, it's calculated from reviews
+    
+    # Make sure average_rating is never None
+    if ragpicker_details.average_rating is None:
+        ragpicker_details.average_rating = 0.0
     
     await db.commit()
     await db.refresh(ragpicker_details)
+    
+    # Ensure average_rating is always a valid float for the response
+    avg_rating = 0.0
+    if ragpicker_details.average_rating is not None:
+        avg_rating = ragpicker_details.average_rating
     
     return RagpickerDetailsResponse(
         clerkId=ragpicker_details.clerkId,
         wallet_address=ragpicker_details.wallet_address,
         RFID=ragpicker_details.RFID,
-        average_rating=ragpicker_details.average_rating
+        average_rating=avg_rating
     )
 
 
