@@ -24,11 +24,3 @@ async def get_ragpicker_reviews(clerk_id: str, db: AsyncSession = Depends(get_db
     """
     # This would retrieve all reviews for the ragpicker
     pass
-
-@router.get("/customer/{clerk_id}", response_model=List[ReviewResponse])
-async def get_customer_reviews(clerk_id: str, db: AsyncSession = Depends(get_db)):
-    """
-    Get all reviews from a customer
-    """
-    # This would retrieve all reviews from the customer
-    pass 
