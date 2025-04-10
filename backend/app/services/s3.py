@@ -189,7 +189,8 @@ async def upload_base64_image_to_s3(base64_image: str, file_extension: str = "jp
             "gif": "image/gif",
             "webp": "image/webp",
             "svg": "image/svg+xml",
-            "bmp": "image/bmp"
+            "bmp": "image/bmp",
+            "pdf" : "application/pdf"
         }
         
         # Get the appropriate content type or default to generic image
