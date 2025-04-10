@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Waste Whirl - FastAPI application deployed on AWS Lambda
+
+Parameters:
+  TwilioAccountSID:
+    Type: String
+    Description: "Twilio Account SID"
+  TwilioAuthToken:
+    Type: String
+    Description: "Twilio Auth Token"
+  TwilioPhoneNumber:
+    Type: String
+    Description: "Twilio Phone Number"
+  AWSS3BucketName:
+    Type: String
+    Description: "S3 bucket name for file storage"
+  AWSCloudfrontURL:
+    Type: String
+    Description: "CloudFront URL for serving S3 files"
+  DatabaseURL:
+    Type: String
+    Description: "Database connection URL"
+    NoEcho: true
+  
+Resources:
+  WasteWhirlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: main.handler
+      Runtime: python3.11
+      CodeUri: .
+      MemorySize: 512
+      Timeout: 30
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+          - Effect: Allow
+            Action:
+              - "s3:PutObject"
+              - "s3:GetObject"
+              - "s3:DeleteObject"
+              - "s3:ListBucket"
+            Resource: 
+              - !Sub "arn:aws:s3:::${AWSS3BucketName}"
+              - !Sub "arn:aws:s3:::${AWSS3BucketName}/*"
+      Environment:
+        Variables:
+          ENVIRONMENT: "production"
+          DATABASE_URL: !Ref DatabaseURL
+          TWILIO_ACCOUNT_SID: !Ref TwilioAccountSID
+          TWILIO_AUTH_TOKEN: !Ref TwilioAuthToken
+          TWILIO_PHONE_NUMBER: !Ref TwilioPhoneNumber
+          AWS_S3_BUCKET_NAME: !Ref AWSS3BucketName
+          AWS_CLOUDFRONT_URL: !Ref AWSCloudfrontURL
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: "/{proxy+}"
+            Method: ANY
+            RestApiId: !Ref WasteWhirlApiGateway
+
+  WasteWhirlApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: "Prod"
+      Cors:
+        AllowMethods: "'OPTIONS,GET,POST,PUT,DELETE'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+      GatewayResponses:
+        DEFAULT_4XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+              Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,DELETE'"
+        DEFAULT_5XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+              Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,DELETE'"
+
+Outputs:
+  ApiGatewayUrl:
+    Value: !Sub 'https://${WasteWhirlApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/'
+    Description: The URL of the API Gateway
+  ApiName:
+    Value: !Ref WasteWhirlApiGateway
+    Description: Name of the API 
