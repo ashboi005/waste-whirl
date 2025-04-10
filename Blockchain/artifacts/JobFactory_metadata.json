@@ -1,0 +1,130 @@
+{
+	"compiler": {
+		"version": "0.8.26+commit.8a97fa7a"
+	},
+	"language": "Solidity",
+	"output": {
+		"abi": [
+			{
+				"anonymous": false,
+				"inputs": [
+					{
+						"indexed": false,
+						"internalType": "address",
+						"name": "contractAddress",
+						"type": "address"
+					},
+					{
+						"indexed": false,
+						"internalType": "address",
+						"name": "user",
+						"type": "address"
+					},
+					{
+						"indexed": false,
+						"internalType": "address",
+						"name": "picker",
+						"type": "address"
+					},
+					{
+						"indexed": false,
+						"internalType": "uint256",
+						"name": "amount",
+						"type": "uint256"
+					}
+				],
+				"name": "JobCreated",
+				"type": "event"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"name": "allJobs",
+				"outputs": [
+					{
+						"internalType": "address",
+						"name": "",
+						"type": "address"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "address",
+						"name": "picker",
+						"type": "address"
+					}
+				],
+				"name": "createJob",
+				"outputs": [],
+				"stateMutability": "payable",
+				"type": "function"
+			},
+			{
+				"inputs": [],
+				"name": "getAllJobs",
+				"outputs": [
+					{
+						"internalType": "address[]",
+						"name": "",
+						"type": "address[]"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			}
+		],
+		"devdoc": {
+			"kind": "dev",
+			"methods": {},
+			"version": 1
+		},
+		"userdoc": {
+			"kind": "user",
+			"methods": {},
+			"version": 1
+		}
+	},
+	"settings": {
+		"compilationTarget": {
+			"JobFactory.sol": "JobFactory"
+		},
+		"evmVersion": "cancun",
+		"libraries": {},
+		"metadata": {
+			"bytecodeHash": "ipfs"
+		},
+		"optimizer": {
+			"enabled": false,
+			"runs": 200
+		},
+		"remappings": []
+	},
+	"sources": {
+		"JobFactory.sol": {
+			"keccak256": "0x16835dc6fe2e8f95b31d5aa22da66477a53f9412192cafd836cc2b1eee5dbeda",
+			"license": "MIT",
+			"urls": [
+				"bzz-raw://61482ff39f7ebfe127d1c667930c282e165623cb88933177c3dae68dd43fa133",
+				"dweb:/ipfs/QmXNCGR2NCRNqsBo9HHtrRBaTXUQVtcZkt7WVu3oEcELSS"
+			]
+		},
+		"RagJob.sol": {
+			"keccak256": "0x1e13c8f532b3c9985133a06694d04a6df413643d92557e3719fcffd78d13351a",
+			"license": "MIT",
+			"urls": [
+				"bzz-raw://a030c00feb5233208e3334ac04605cdf4ba1de1789320f92abd5568347b6f773",
+				"dweb:/ipfs/QmemvMyefWFbFhu7hKGaiGeXgmLuisHwpHUtXbr2eJLVnc"
+			]
+		}
+	},
+	"version": 1
+}
