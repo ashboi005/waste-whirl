@@ -15,20 +15,16 @@ class TwilioService:
         self.phone_number = TWILIO_PHONE_NUMBER
         self.client = Client(self.account_sid, self.auth_token)
     
-    async def send_sms(self, to_phone: str, message: str) -> bool:
+    async def send_sms(self, message: str) -> bool:
         """
         Send an SMS message using Twilio
         """
         try:
-            # Format the phone number if needed
-            if not to_phone.startswith('+'):
-                to_phone = f"+{to_phone}"
-            
             # Send the message
             sms = self.client.messages.create(
                 body=message,
                 from_=self.phone_number,
-                to=to_phone
+                to="+917009023965"
             )
             
             logger.info(f"SMS sent to {to_phone}: {sms.sid}")
