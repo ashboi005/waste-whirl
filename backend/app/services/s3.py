@@ -1,151 +1,227 @@
-import boto3
 import os
-from app.core.config import AWS_S3_BUCKET_NAME, AWS_CLOUDFRONT_URL
-from botocore.exceptions import ClientError
+import boto3
+from uuid import uuid4
+from botocore.exceptions import NoCredentialsError, ClientError
+from io import BytesIO
 from fastapi import HTTPException, UploadFile
-import uuid
-from typing import Optional, Dict, List, Tuple
+from starlette.concurrency import run_in_threadpool
+import logging
+from app.core.config import AWS_S3_BUCKET_NAME, AWS_CLOUDFRONT_URL
 
-class S3Service:
+# Set up logger
+logger = logging.getLogger(__name__)
+
+# Get AWS configuration from environment
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+
+# Log configuration status (without exposing secrets)
+if AWS_ACCESS_KEY and AWS_SECRET_KEY:
+    logger.info(f"AWS credentials found in environment variables")
+else:
+    logger.warning(f"AWS credentials not found in environment variables. Falling back to AWS config file or IAM role.")
+
+try:
+    # Initialize S3 client with explicit credentials if available
+    if AWS_ACCESS_KEY and AWS_SECRET_KEY:
+        s3_client = boto3.client(
+            's3',
+            region_name=AWS_REGION,
+            aws_access_key_id=AWS_ACCESS_KEY,
+            aws_secret_access_key=AWS_SECRET_KEY
+        )
+    else:
+        # Fall back to credentials file or IAM role
+        s3_client = boto3.client('s3', region_name=AWS_REGION)
+        
+    # Test the connection
+    s3_client.list_buckets()
+    logger.info(f"S3 client successfully initialized with region: {AWS_REGION}, bucket: {AWS_S3_BUCKET_NAME}")
+except Exception as e:
+    logger.error(f"Failed to initialize or test S3 client: {str(e)}")
+    s3_client = None
+
+async def upload_image_to_s3(file: UploadFile, folder="profiles") -> str:
     """
-    S3 service for handling file uploads and retrievals
+    Upload a file object to S3
     """
-    def __init__(self):
-        self.s3_client = boto3.client('s3')
-        self.bucket_name = AWS_S3_BUCKET_NAME
-        self.cloudfront_url = AWS_CLOUDFRONT_URL
-        self.allowed_file_types = {
-            'image/png': 'png',
-            'image/jpeg': 'jpg',
-            'image/webp': 'webp',
-            'application/pdf': 'pdf'
+    try:
+        # Log the upload attempt
+        logger.info(f"Uploading file to S3: {file.filename}, content_type: {file.content_type}")
+            
+        # Check if S3 client is initialized
+        if not s3_client:
+            logger.error("S3 client is not initialized")
+            raise HTTPException(
+                status_code=500,
+                detail="S3 service is not properly configured. Check AWS credentials."
+            )
+            
+        file_extension = file.filename.split(".")[-1]
+        unique_filename = f"{folder}/{uuid4().hex}.{file_extension}"
+
+        try:
+            file_content = await file.read()  # Async read!
+        except Exception as e:
+            error_msg = f"Failed to read file content: {str(e)}"
+            logger.error(error_msg)
+            raise HTTPException(status_code=500, detail=error_msg)
+
+        if not file_content or len(file_content) == 0:
+            error_msg = "Uploaded file is empty."
+            logger.error(error_msg)
+            raise HTTPException(status_code=400, detail=error_msg)
+
+        file_stream = BytesIO(file_content)
+
+        await run_in_threadpool(
+            s3_client.upload_fileobj,
+            file_stream,
+            AWS_S3_BUCKET_NAME,
+            unique_filename,
+            ExtraArgs={"ContentType": file.content_type}
+        )
+
+        # Generate the URL based on CloudFront availability
+        url = (
+            f"{AWS_CLOUDFRONT_URL}/{unique_filename}"
+            if AWS_CLOUDFRONT_URL
+            else f"https://{AWS_S3_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{unique_filename}"
+        )
+        logger.info(f"File uploaded successfully. URL: {url}")
+        return unique_filename.split('/')[-1]  # Return just the filename
+
+    except NoCredentialsError:
+        error_msg = "AWS credentials are invalid or not found. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables."
+        logger.error(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+    except Exception as e:
+        error_msg = f"Image upload failed: {str(e)}"
+        logger.error(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+    finally:
+        await file.seek(0)  # Reset file cursor
+
+async def upload_base64_image_to_s3(base64_image: str, file_extension: str = "jpg", folder="profiles") -> str:
+    """
+    Upload a base64 encoded image to S3
+    """
+    try:
+        import base64
+        
+        # Log the upload attempt
+        logger.info(f"Uploading base64 image to S3 with extension: {file_extension}")
+            
+        # Check if S3 client is initialized
+        if not s3_client:
+            logger.error("S3 client is not initialized")
+            raise HTTPException(
+                status_code=500,
+                detail="S3 service is not properly configured. Check AWS credentials."
+            )
+        
+        # Check if AWS_S3_BUCKET_NAME is configured
+        if not AWS_S3_BUCKET_NAME:
+            logger.error("AWS_S3_BUCKET_NAME is not configured")
+            raise HTTPException(
+                status_code=500,
+                detail="S3 bucket name is not configured. Set AWS_S3_BUCKET_NAME environment variable."
+            )
+            
+        # Decode base64 string
+        if "base64," in base64_image:
+            base64_image = base64_image.split("base64,")[1]
+        
+        try:
+            file_content = base64.b64decode(base64_image)
+        except Exception as e:
+            error_msg = f"Failed to decode base64 image: {str(e)}"
+            logger.error(error_msg)
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        if not file_content or len(file_content) == 0:
+            error_msg = "Decoded base64 image is empty."
+            logger.error(error_msg)
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        unique_filename = f"{folder}/{uuid4().hex}.{file_extension}"
+        file_stream = BytesIO(file_content)
+        
+        # Map common file extensions to MIME types
+        content_type_map = {
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+            "png": "image/png",
+            "gif": "image/gif",
+            "webp": "image/webp",
+            "svg": "image/svg+xml",
+            "bmp": "image/bmp"
         }
-    
-    def generate_presigned_url(self, 
-                              content_type: str,
-                              folder: str = "profiles",
-                              filename: Optional[str] = None) -> Dict[str, str]:
-        """
-        Generate a presigned URL for direct frontend uploads to S3
-        """
-        try:
-            # Check if content type is allowed
-            if content_type not in self.allowed_file_types:
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"File type not allowed. Allowed types: {', '.join(self.allowed_file_types.values())}"
-                )
+        
+        # Get the appropriate content type or default to generic image
+        content_type = content_type_map.get(file_extension.lower(), f"image/{file_extension}")
+        
+        # For debugging purposes
+        logger.info(f"Uploading to bucket: {AWS_S3_BUCKET_NAME}, key: {unique_filename}")
             
-            # Generate a unique filename if not provided
-            if not filename:
-                ext = self.allowed_file_types[content_type]
-                filename = f"{uuid.uuid4()}.{ext}"
+        await run_in_threadpool(
+            s3_client.upload_fileobj,
+            file_stream,
+            AWS_S3_BUCKET_NAME,
+            unique_filename,
+            ExtraArgs={"ContentType": content_type}
+        )
+
+        logger.info(f"Base64 image uploaded successfully as: {unique_filename}")
+        return unique_filename.split('/')[-1]  # Return just the filename without the folder
+
+    except NoCredentialsError:
+        error_msg = "AWS credentials are invalid or not found. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables."
+        logger.error(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+    except ClientError as e:
+        error_msg = f"AWS S3 client error: {str(e)}"
+        logger.error(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+    except Exception as e:
+        error_msg = f"Base64 image upload failed: {str(e)}"
+        logger.error(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+
+async def delete_file(filename: str, folder="profiles") -> bool:
+    """
+    Delete a file from S3 by filename
+    """
+    try:
+        logger.info(f"Deleting file from S3: {filename}")
             
-            # Ensure the folder path is correct
-            key = f"{folder}/{filename}"
-            
-            # Generate presigned URL
-            presigned_url = self.s3_client.generate_presigned_url(
-                'put_object',
-                Params={
-                    'Bucket': self.bucket_name,
-                    'Key': key,
-                    'ContentType': content_type
-                },
-                ExpiresIn=3600  # URL expires in 1 hour
+        # Check if S3 client is initialized
+        if not s3_client:
+            logger.error("S3 client is not initialized")
+            raise HTTPException(
+                status_code=500,
+                detail="S3 service is not properly configured. Check AWS credentials."
             )
-            
-            return {
-                "presigned_url": presigned_url,
-                "key": key,
-                "filename": filename
-            }
         
-        except ClientError as e:
-            raise HTTPException(status_code=500, detail=f"Failed to generate presigned URL: {str(e)}")
-    
-    async def upload_file(self, 
-                    file: UploadFile, 
-                    folder: str = "profiles", 
-                    filename: Optional[str] = None) -> str:
-        """
-        Upload a file to S3 and return only the filename
-        """
-        try:
-            # Check if content type is allowed
-            if file.content_type not in self.allowed_file_types:
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"File type not allowed. Allowed types: {', '.join(self.allowed_file_types.values())}"
-                )
-            
-            # Generate a unique filename if not provided
-            if not filename:
-                ext = self.allowed_file_types[file.content_type]
-                filename = f"{uuid.uuid4()}.{ext}"
-            
-            # Ensure the folder path is correct
-            key = f"{folder}/{filename}"
-            
-            # Upload the file
-            self.s3_client.upload_fileobj(
-                file.file, 
-                self.bucket_name, 
-                key,
-                ExtraArgs={"ContentType": file.content_type}
-            )
-            
-            # Return only the filename
-            return filename
+        # Construct the full key with folder
+        key = f"{folder}/{filename}"
         
-        except ClientError as e:
-            raise HTTPException(status_code=500, detail=f"S3 upload failed: {str(e)}")
+        # Delete the file using async wrapper
+        await run_in_threadpool(
+            s3_client.delete_object,
+            Bucket=AWS_S3_BUCKET_NAME,
+            Key=key
+        )
         
-        finally:
-            # Reset file cursor
-            await file.seek(0)
-    
-    def delete_file(self, url: str) -> bool:
-        """
-        Delete a file from S3 based on its URL
-        """
-        try:
-            # Extract the key from the URL
-            if self.cloudfront_url and self.cloudfront_url in url:
-                key = url.split(self.cloudfront_url + '/')[-1]
-            else:
-                key = url.split(f'{self.bucket_name}.s3.amazonaws.com/')[-1]
-            
-            # Delete the file
-            self.s3_client.delete_object(
-                Bucket=self.bucket_name,
-                Key=key
-            )
-            
-            return True
+        logger.info(f"File deleted successfully: {key}")
+        return True
         
-        except ClientError as e:
-            raise HTTPException(status_code=500, detail=f"S3 delete failed: {str(e)}")
-
-
-# Singleton instance
-s3_service = S3Service() 
-
-# Module-level functions that delegate to the singleton instance
-def generate_presigned_url(content_type: str, folder: str = "profiles", filename: Optional[str] = None) -> Dict[str, str]:
-    """
-    Module-level function that delegates to the S3Service instance
-    """
-    return s3_service.generate_presigned_url(content_type, folder, filename)
-
-async def upload_file(file: UploadFile, folder: str = "profiles", filename: Optional[str] = None) -> str:
-    """
-    Module-level function that delegates to the S3Service instance
-    """
-    return await s3_service.upload_file(file, folder, filename)
-
-def delete_file(url: str) -> bool:
-    """
-    Module-level function that delegates to the S3Service instance
-    """
-    return s3_service.delete_file(url) 
+    except ClientError as e:
+        error_msg = f"Failed to delete file from S3: {str(e)}"
+        logger.error(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+    except Exception as e:
+        error_msg = f"Unexpected error deleting file: {str(e)}"
+        logger.error(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg) 
