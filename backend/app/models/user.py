@@ -79,16 +79,6 @@ class Requests(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
-class Tips(Base):
-    __tablename__ = "tips"
-
-    id = Column(Integer, primary_key=True, index=True)
-    customer_clerkId = Column(String, ForeignKey("users.clerkId"))
-    ragpicker_clerkId = Column(String, ForeignKey("users.clerkId"))
-    amount = Column(Float)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-
 class ApplicationStatus(enum.Enum):
     PENDING = "PENDING"
     ACCEPTED = "ACCEPTED"
