@@ -8,8 +8,13 @@ class RagpickerDetailsBase(BaseModel):
     average_rating: float = 0.0
 
 
-class RagpickerDetailsCreate(RagpickerDetailsBase):
-    pass
+class RagpickerDetailsCreate(BaseModel):
+    wallet_address: Optional[str] = None
+
+
+class RagpickerDetailsUpdate(BaseModel):
+    wallet_address: Optional[str] = None
+    RFID: Optional[str] = None
 
 
 class RagpickerDetailsResponse(RagpickerDetailsBase):
