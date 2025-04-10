@@ -27,7 +27,8 @@ else:
     ASYNC_DATABASE_URL = DATABASE_URL
     SYNC_DATABASE_URL = DATABASE_URL.replace("postgresql+asyncpg", "postgresql+psycopg2") if DATABASE_URL else None
 
-AWS_S3_BUCKET_NAME = os.getenv("AWS_S3_BUCKET_NAME")
+# Support both bucket name environment variables
+AWS_S3_BUCKET_NAME = os.getenv("AWS_S3_BUCKET_NAME") or os.getenv("AWS_BUCKET_NAME")
 AWS_CLOUDFRONT_URL = os.getenv("AWS_CLOUDFRONT_URL")
 
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
