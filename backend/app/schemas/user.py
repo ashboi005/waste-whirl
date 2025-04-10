@@ -1,7 +1,8 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from datetime import datetime
-
+from datetime import datetime
+from enum import Enum
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -44,3 +45,33 @@ class UserDetailsResponse(UserDetailsBase):
 class ProfilePictureUpload(BaseModel):
     """Schema for profile picture upload request"""
     content_type: str = Field(..., description="Content type of the file to be uploaded (e.g., 'image/jpeg', 'image/png')") 
+
+
+class ApplicationStatus(str, Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+class RagpickerApplicationBase(BaseModel):
+    clerk_id: str
+    document_url: str
+    notes: str
+    status: ApplicationStatus
+
+class RagpickerApplicationCreate(RagpickerApplicationBase):
+    pass
+
+class RagpickerApplicationResponse(RagpickerApplicationBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class ApplicationCreateRequest(BaseModel):
+    clerk_id: str
+    notes: str
+    document: str  # Base64 encoded string
+    file_extension: Optional[str] = "pdf"
+    folder: Optional[str] = "applications"

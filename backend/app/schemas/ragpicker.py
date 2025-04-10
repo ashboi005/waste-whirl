@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional
-
+from app.models.user import ApplicationStatus
+from datetime import datetime
 
 class RagpickerDetailsBase(BaseModel):
     wallet_address: Optional[str] = None
@@ -41,3 +42,20 @@ class RagpickerListResponse(BaseModel):
 
     class Config:
         from_attributes = True 
+
+class RagpickerApplicationBase(BaseModel):
+    clerk_id: str
+    document_url: str
+    notes: str
+    status: ApplicationStatus
+
+class RagpickerApplicationCreate(RagpickerApplicationBase):
+    pass
+
+class RagpickerApplicationResponse(RagpickerApplicationBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

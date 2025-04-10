@@ -1,90 +1,129 @@
-from fastapi import APIRouter, Request, Depends, Form, HTTPException
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
+from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.database import get_db
-from app.models.user import RagpickerApplication, RagpickerDetails, ApplicationStatus
-from app.services.s3 import upload_base64_image_to_s3
-from app.services.twilio_service import twilio_service
+from app.schemas.user import RagpickerApplicationResponse, ApplicationStatus,ApplicationCreateRequest
+from app.models.user import User, RagpickerApplication
+from app.services import s3
+from datetime import datetime
+import httpx
+from typing import List
 import os
-import uuid
 
-admin_router = APIRouter()
+router = APIRouter()
 
-templates = Jinja2Templates(directory="app/templates")
+# Clerk SDK configuration
+CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY")
+CLERK_API_URL = "https://api.clerk.com"
 
-@admin_router.get("/", response_class=HTMLResponse)
-async def admin_dashboard(request: Request):
-    """
-    Admin dashboard main page
-    """
-    return templates.TemplateResponse("admin/dashboard.html", {"request": request})
+async def update_clerk_role(clerk_id: str, new_role: str):
+    """Update user role in Clerk system"""
+    headers = {
+        "Authorization": f"Bearer {CLERK_SECRET_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "public_metadata": {
+            "role": new_role
+        }
+    }
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.patch(
+            f"{CLERK_API_URL}/users/{clerk_id}",
+            json=payload,
+            headers=headers
+        )
+        
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update user role in Clerk system"
+        )
 
-@admin_router.get("/users", response_class=HTMLResponse)
-async def admin_users(request: Request, db: AsyncSession = Depends(get_db)):
-    """
-    Admin users management page
-    """
-    return templates.TemplateResponse("admin/users.html", {"request": request})
-
-@admin_router.get("/sensors", response_class=HTMLResponse)
-async def admin_sensors(request: Request, db: AsyncSession = Depends(get_db)):
-    """
-    Admin sensors management page
-    """
-    return templates.TemplateResponse("admin/sensors.html", {"request": request})
-
-@admin_router.get("/finances", response_class=HTMLResponse)
-async def admin_finances(request: Request, db: AsyncSession = Depends(get_db)):
-    """
-    Admin finances overview page
-    """
-    return templates.TemplateResponse("admin/finances.html", {"request": request})
-
-@admin_router.post("/ragpicker/apply")
-async def apply_ragpicker(
-    clerk_id: str = Form(...),
-    notes: str = Form(...),
+@router.post("/admin/applications/", status_code=status.HTTP_201_CREATED)
+async def create_application(
+    application_data: ApplicationCreateRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Submit a ragpicker application
-    """
-    # Generate a unique filename for the document
-    file_name = f"{clerk_id}_{uuid.uuid4()}.pdf"
+    Submit a new ragpicker application with base64 document
     
-    # Generate presigned URL for document upload
-    presigned_url = generate_presigned_url(file_name, "application/pdf")
-    
-    # Create application record
-    application = RagpickerApplication(
-        clerk_id=clerk_id,
-        document_url=f"ragpicker-documents/{file_name}",
-        notes=notes
-    )
-    
-    db.add(application)
-    await db.commit()
-    
-    return {
-        "presigned_url": presigned_url,
-        "application_id": application.id
+    Request Body (JSON):
+    {
+        "clerk_id": "user_123",
+        "notes": "Application notes",
+        "document": "base64encodedstring",
+        "file_extension": "pdf",  # optional
+        "folder": "applications"   # optional
     }
+    """
+    try:
+        # Upload document to S3
+        document_url = await s3.upload_base64_image_to_s3(
+            base64_image=application_data.document,
+            file_extension=application_data.file_extension,
+            folder=application_data.folder
+        )
+        
+        # Create application record
+        new_application = RagpickerApplication(
+            clerk_id=application_data.clerk_id,
+            document_url=document_url,
+            notes=application_data.notes,
+            status=ApplicationStatus.PENDING
+        )
+        
+        db.add(new_application)
+        await db.commit()
+        await db.refresh(new_application)
+        
+        return {
+            "message": "Application submitted successfully",
+            "application_id": new_application.id,
+            "document_url": document_url
+        }
+        
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Application submission failed: {str(e)}"
+        )
 
-@admin_router.post("/ragpicker/{application_id}/review")
+
+
+@router.get("/admin/applications/", response_model=List[RagpickerApplicationResponse])
+async def get_all_applications(
+    status: ApplicationStatus = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get all ragpicker applications (Admin only)
+    """
+    query = select(RagpickerApplication)
+    
+    if status:
+        query = query.where(RagpickerApplication.status == status)
+        
+    result = await db.execute(query)
+    return result.scalars().all()
+
+@router.post("/admin/applications/{application_id}/review", status_code=status.HTTP_200_OK)
 async def review_application(
     application_id: int,
     status: ApplicationStatus,
-    phone_number: str = Form(...),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Review and approve/reject a ragpicker application
+    Approve or reject a ragpicker application (Admin only)
     """
-    # Get the application
-    query = select(RagpickerApplication).where(RagpickerApplication.id == application_id)
-    result = await db.execute(query)
+    # Get application
+    result = await db.execute(
+        select(RagpickerApplication)
+        .where(RagpickerApplication.id == application_id)
+    )
     application = result.scalar_one_or_none()
     
     if not application:
@@ -92,31 +131,31 @@ async def review_application(
     
     # Update application status
     application.status = status
+    application.updated_at = datetime.utcnow()
+    
+    if status == ApplicationStatus.APPROVED:
+        # Get associated user
+        user_result = await db.execute(
+            select(User)
+            .where(User.clerkId == application.clerk_id)
+        )
+        user = user_result.scalar_one_or_none()
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+            
+        # Update role in Clerk system
+        try:
+            await update_clerk_role(application.clerk_id, "RAGPICKER")
+        except Exception as e:
+            await db.rollback()
+            raise
+            
+        # Update local database
+        user.role = "RAGPICKER"
+        db.add(user)
+    
+    db.add(application)
     await db.commit()
     
-    # Send notification via Twilio
-    if status == ApplicationStatus.ACCEPTED:
-        # Generate RFID tag
-        rfid_tag = f"RFID_{uuid.uuid4().hex[:8].upper()}"
-        
-        # Create or update ragpicker details
-        ragpicker = RagpickerDetails(
-            clerkId=application.clerk_id,
-            RFID=rfid_tag
-        )
-        db.add(ragpicker)
-        await db.commit()
-        
-        message = f"Congratulations! Your ragpicker application has been accepted. Your RFID tag is: {rfid_tag}"
-    else:
-        message = "We regret to inform you that your ragpicker application has been rejected."
-    
-    try:
-        send_sms(phone_number, message)
-    except Exception as e:
-        # Log the error but don't fail the request
-        print(f"Failed to send SMS: {str(e)}")
-    
-    return {"status": "success", "message": "Application review completed"}
-
- 
+    return {"message": f"Application {status.value} successfully"}

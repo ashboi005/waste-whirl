@@ -8,9 +8,8 @@ from fastapi import HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.requests import Request
 import logging
-
 from app.api.api import api_router
-from app.api.admin import admin_router
+from app.api.admin import router as admin_router
 from app.api.endpoints.sensors import router as sensor_router
 from app.core.config import ENVIRONMENT, PROJECT_NAME, API_V1_STR, DATABASE_URL
 
@@ -99,7 +98,7 @@ if ENVIRONMENT == "development":
 
 # Include API routers
 app.include_router(api_router)
-app.include_router(admin_router, prefix="/admin")
+app.include_router(admin_router)
 app.include_router(sensor_router, prefix="/sensors")
 
 @app.get("/")
