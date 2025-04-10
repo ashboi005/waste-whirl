@@ -1,0 +1,213 @@
+<!-- app/templates/user_details.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Profile Setup</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #1a73e8;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #5f6368;
+            font-weight: 500;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #dadce0;
+            border-radius: 6px;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        .file-input {
+            border: 2px dashed #dadce0;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+
+        #preview {
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: 50%;
+            margin: 20px auto;
+            display: none;
+        }
+
+        button {
+            background: #1a73e8;
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #1557b0;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+            color: #5f6368;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Profile Setup</h1>
+        
+        <div class="form-group">
+            <div class="file-input" onclick="document.getElementById('fileInput').click()">
+                Click to upload profile picture
+            </div>
+            <input type="file" id="fileInput" accept="image/*" style="display: none;">
+            <img id="preview" alt="Profile Preview">
+        </div>
+
+        <form id="profileForm">
+            <div class="form-group">
+                <label for="phone">Phone Number</label>
+                <input type="tel" id="phone" required>
+            </div>
+
+            <div class="form-group">
+                <label for="address">Address</label>
+                <input type="text" id="address" required>
+            </div>
+
+            <div class="form-group">
+                <label for="bio">Bio</label>
+                <textarea id="bio" rows="4"></textarea>
+            </div>
+
+            <div class="loading" id="loading">
+                Saving profile...
+            </div>
+
+            <button type="submit">Save Profile</button>
+        </form>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        let base64Image = null;
+        let fileExtension = null;
+
+        // Handle file selection
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                fileExtension = file.name.split('.').pop().toLowerCase();
+                
+                reader.onload = function(e) {
+                    base64Image = e.target.result.split(',')[1];
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+                };
+                
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Handle form submission
+        document.getElementById('profileForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const clerkId = 'string'; // Replace with actual Clerk ID
+            const phone = document.getElementById('phone').value;
+            const address = document.getElementById('address').value;
+            const bio = document.getElementById('bio').value;
+
+            document.getElementById('loading').style.display = 'block';
+
+            try {
+                const API_BASE = 'http://localhost:8000'; // FastAPI default port
+                const response = await fetch(`${API_BASE}/users/${clerkId}/details`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        phone: phone,
+                        address: address,
+                        bio: bio,
+                        base64_image: base64Image,
+                        file_extension: fileExtension
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                const result = await response.json();
+                alert('Profile saved successfully!');
+                window.location.reload();
+            } catch (error) {
+                console.error('Error:', error);
+                alert(`Error saving profile: ${error.message}`);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        });
+
+        // Initial load: Fetch existing profile data
+        window.onload = async () => {
+            const clerkId = 'string'; // Replace with actual Clerk ID
+            try {
+                const response = await fetch(`/users/${clerkId}/details`);
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('phone').value = data.phone || '';
+                    document.getElementById('address').value = data.address || '';
+                    document.getElementById('bio').value = data.bio || '';
+                    if (data.profile_pic_url) {
+                        preview.src = data.profile_pic_url;
+                        preview.style.display = 'block';
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching profile:', error);
+            }
+        };
+    </script>
+</body>
+</html>
