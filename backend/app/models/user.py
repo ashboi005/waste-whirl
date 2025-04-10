@@ -75,6 +75,7 @@ class Requests(Base):
     customer_clerkId = Column(String, ForeignKey("users.clerkId"))
     ragpicker_clerkId = Column(String, ForeignKey("users.clerkId"))
     status = Column(String)  # PENDING, ACCEPTED, REJECTED, COMPLETED
+    smart_contract_address = Column(String, nullable=True)  # Added for blockchain integration
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
