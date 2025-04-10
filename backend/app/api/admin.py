@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.database import get_db
 from app.models.user import RagpickerApplication, RagpickerDetails, ApplicationStatus
-from app.services.s3 import generate_presigned_url
+from app.services.s3 import upload_base64_image_to_s3
 from app.services.twilio_service import twilio_service
 import os
 import uuid
