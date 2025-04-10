@@ -26,15 +26,21 @@ class UserDetailsBase(BaseModel):
     phone: Optional[str] = None
     address: Optional[str] = None
     bio: Optional[str] = None
-    profile_pic_url: Optional[str] = None
 
 
 class UserDetailsCreate(UserDetailsBase):
-    pass
+    base64_image: Optional[str] = None
+    file_extension: Optional[str] = None
 
 
 class UserDetailsResponse(UserDetailsBase):
     clerkId: str
+    profile_pic_url: Optional[str] = None
 
     class Config:
-        from_attributes = True 
+        from_attributes = True
+
+
+class ProfilePictureUpload(BaseModel):
+    """Schema for profile picture upload request"""
+    content_type: str = Field(..., description="Content type of the file to be uploaded (e.g., 'image/jpeg', 'image/png')") 

@@ -90,4 +90,4 @@ async def get_db():
 
 
 def get_sync_engine():
-    return sync_engine 
+    return sync_engine
