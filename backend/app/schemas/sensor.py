@@ -1,48 +1,42 @@
+# schemas/sensor.py
 from pydantic import BaseModel
-from typing import Optional
 from datetime import datetime
 
-
 class SensorBase(BaseModel):
+    sensor_id: str
     sensor_name: str
     location: str
-    sensor_status: bool = False
-
+    company_id: int | None = None
 
 class SensorCreate(SensorBase):
-    sensor_id: str
-
+    pass
 
 class SensorResponse(SensorBase):
-    sensor_id: str
-
+    sensor_status: bool
+    
     class Config:
-        from_attributes = True
-
+        orm_mode = True
 
 class SensorLogBase(BaseModel):
     sensor_id: str
-    RFID: Optional[str] = None
     sensor_status: bool
-
 
 class SensorLogCreate(SensorLogBase):
     pass
 
-
 class SensorLogResponse(SensorLogBase):
     id: int
+    RFID: str | None
     timestamp: datetime
-
+    
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 class SensorStatusUpdate(BaseModel):
     sensor_id: str
     status: bool
 
-
-class SensorRFIDUpdate(BaseModel):
+class RFIDUpdate(BaseModel):
     sensor_id: str
-    rfid: str 
+    rfid: str
