@@ -130,3 +130,22 @@ class S3Service:
 
 # Singleton instance
 s3_service = S3Service() 
+
+# Module-level functions that delegate to the singleton instance
+def generate_presigned_url(content_type: str, folder: str = "profiles", filename: Optional[str] = None) -> Dict[str, str]:
+    """
+    Module-level function that delegates to the S3Service instance
+    """
+    return s3_service.generate_presigned_url(content_type, folder, filename)
+
+async def upload_file(file: UploadFile, folder: str = "profiles", filename: Optional[str] = None) -> str:
+    """
+    Module-level function that delegates to the S3Service instance
+    """
+    return await s3_service.upload_file(file, folder, filename)
+
+def delete_file(url: str) -> bool:
+    """
+    Module-level function that delegates to the S3Service instance
+    """
+    return s3_service.delete_file(url) 

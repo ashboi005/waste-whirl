@@ -11,7 +11,6 @@ import logging
 
 from app.api.api import api_router
 from app.api.admin import admin_router
-from app.api.img_process import img_process_router
 from app.core.config import ENVIRONMENT, PROJECT_NAME, API_V1_STR, DATABASE_URL
 
 # Configure logging
@@ -27,7 +26,7 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json",  
     servers=[
-        {"url": "https://oz0llkpspd.execute-api.ap-south-1.amazonaws.com/Prod/", "description": "Production Server"},
+        {"url": "https://ohmsi5xapc.execute-api.ap-south-1.amazonaws.com/Prod/", "description": "Production Server"},
         {"url": "http://localhost:8000", "description": "Local Development Server"},
     ],
 )
@@ -100,7 +99,6 @@ if ENVIRONMENT == "development":
 # Include API routers
 app.include_router(api_router)
 app.include_router(admin_router, prefix="/admin")
-app.include_router(img_process_router, prefix="/img_process")
 
 @app.get("/")
 async def root():
