@@ -5,9 +5,12 @@ from app.models.sensor import Sensor, SensorLog
 from app.schemas.sensor import SensorCreate, SensorResponse, SensorLogCreate, SensorLogResponse, SensorStatusUpdate, RFIDUpdate
 from typing import List
 from sqlalchemy import select
-from app.models.user import RagpickerDetails,CompanyBalances,Balances
+from app.models.user import User, UserDetails,RagpickerDetails,CompanyBalances,Balances
+from app.services.twilio_service import TwilioService
+import os
 
 router = APIRouter()
+twilio_service = TwilioService()
 
 @router.post("/", response_model=SensorResponse, status_code=status.HTTP_201_CREATED)
 async def create_sensor(sensor_data: SensorCreate, db: AsyncSession = Depends(get_db)):
@@ -46,7 +49,7 @@ async def get_sensors(db: AsyncSession = Depends(get_db)):
     sensors = result.scalars().all()
     return sensors
 
-@router.get("/{sensor_id}", response_model=SensorResponse)
+@router.get("/get_sensor/{sensor_id}", response_model=SensorResponse)
 async def get_sensor(sensor_id: str, db: AsyncSession = Depends(get_db)):
     """
     Get a specific sensor by ID
@@ -100,9 +103,6 @@ async def update_sensor_status(
 ):
     """
     Update sensor status and handle payments when bin is emptied
-    1. Toggle status if received status matches current status
-    2. Create log entry
-    3. Process payment when status changes to False
     """
     # Get sensor
     sensor = await db.get(Sensor, data.sensor_id)
@@ -129,9 +129,17 @@ async def update_sensor_status(
     await db.commit()
     await db.refresh(sensor)
 
+    # Send bin full notification
+    if new_status:
+        try:
+            company_number = os.getenv("TWILIO_PHONE_NUMBER")
+            message = f"🚨 Bin {sensor.sensor_id} at {sensor.location} is full!"
+            await twilio_service.send_sms(message)
+        except Exception as e:
+            print(f"Failed to send SMS: {str(e)}")
+
     # Process payment only when bin is emptied (status=False)
     if not new_status:
-        # Find latest successful RFID log
         rfid_log = await db.execute(
             select(SensorLog)
             .where(
@@ -145,7 +153,6 @@ async def update_sensor_status(
         rfid_log = rfid_log.scalar_one_or_none()
 
         if rfid_log:
-            # Get associated ragpicker
             ragpicker = await db.execute(
                 select(RagpickerDetails)
                 .where(RagpickerDetails.RFID == rfid_log.RFID)
@@ -153,7 +160,6 @@ async def update_sensor_status(
             ragpicker = ragpicker.scalar_one_or_none()
 
             if ragpicker:
-                # Get company balance
                 company = await db.execute(
                     select(CompanyBalances)
                     .where(CompanyBalances.id == sensor.company_id)
@@ -161,10 +167,8 @@ async def update_sensor_status(
                 company = company.scalar_one_or_none()
 
                 if company and company.balance >= 60:
-                    # Update balances
                     company.balance -= 60
                     
-                    # Update ragpicker balance
                     ragpicker_balance = await db.execute(
                         select(Balances)
                         .where(Balances.clerkId == ragpicker.clerkId)
@@ -181,8 +185,25 @@ async def update_sensor_status(
                     
                     await db.commit()
 
-    return {"message": "Status updated successfully"}
+                    # Send payment notification (fixed section)
+                    try:
+                        user_details = await db.execute(
+                            select(UserDetails)
+                            .join(User, UserDetails.clerkId == User.clerkId)
+                            .where(User.clerkId == ragpicker.clerkId)
+                        )
+                        user_details = user_details.scalar_one_or_none()
+                        
+                        if user_details and user_details.phone:
+                            message = (
+                                f"💸 ₹60 credited for emptying bin {sensor.sensor_id}\n"
+                                f"New balance: ₹{ragpicker_balance.balance if ragpicker_balance else 60}"
+                            )
+                            await twilio_service.send_sms(message)
+                    except Exception as e:
+                        print(f"Failed to send payment SMS: {str(e)}")
 
+    return {"message": "Status updated successfully"}
 
 
 @router.post("/rfid", status_code=status.HTTP_200_OK)
@@ -192,9 +213,6 @@ async def update_rfid(
 ):
     """
     Update RFID for the latest active log entry
-    1. Verify RFID exists in system
-    2. Find latest open log entry
-    3. Update RFID information
     """
     # Verify RFID exists
     ragpicker = await db.execute(
