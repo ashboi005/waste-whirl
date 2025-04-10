@@ -4,6 +4,7 @@ from sqlalchemy import create_engine
 from app.core.config import ASYNC_DATABASE_URL, SYNC_DATABASE_URL
 import logging
 import os
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 logger = logging.getLogger(__name__)
 
@@ -24,20 +25,49 @@ if not ASYNC_DATABASE_URL:
         else:
             logger.warning(".env file not found!")
 
+# Function to remove sslmode parameter from PostgreSQL URL
+def clean_connection_url(url):
+    if not url or not isinstance(url, str):
+        return url
+        
+    if 'postgresql' in url and 'sslmode' in url:
+        parsed = urlparse(url)
+        query_params = parse_qs(parsed.query)
+        
+        # Remove the sslmode parameter
+        if 'sslmode' in query_params:
+            del query_params['sslmode']
+            
+        # Reconstruct the URL
+        clean_query = urlencode(query_params, doseq=True)
+        clean_url = urlunparse((
+            parsed.scheme, 
+            parsed.netloc, 
+            parsed.path, 
+            parsed.params, 
+            clean_query, 
+            parsed.fragment
+        ))
+        return clean_url
+    return url
 
+# Clean the connection URLs to remove sslmode
+clean_async_url = clean_connection_url(ASYNC_DATABASE_URL)
+clean_sync_url = clean_connection_url(SYNC_DATABASE_URL)
+
+# Create async engine with cleaned URL
 async_engine = create_async_engine(
-    ASYNC_DATABASE_URL,
+    clean_async_url,
     echo=False,
     future=True,
 )
 
-
+# Create sync engine with cleaned URL
 sync_engine = create_engine(
-    SYNC_DATABASE_URL,
+    clean_sync_url,
     echo=False,
     future=True,
 )
-
 
 async_session_factory = sessionmaker(
     async_engine, 
