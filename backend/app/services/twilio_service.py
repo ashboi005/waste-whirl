@@ -2,6 +2,7 @@ from twilio.rest import Client
 from app.core.config import TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER
 from fastapi import HTTPException
 import logging
+from app.core.config import ENVIRONMENT
 
 logger = logging.getLogger(__name__)
 
@@ -20,15 +21,20 @@ class TwilioService:
         Send an SMS message using Twilio
         """
         try:
-            # Send the message
-            sms = self.client.messages.create(
-                body=message,
-                from_=self.phone_number,
-                to="+917009023965"
-            )
+            to_phone = "+917009023965"
             
-            logger.info(f"SMS sent to {to_phone}: {sms.sid}")
-            return True
+            if ENVIRONMENT != "production":
+                print(f"SMS: {message}")
+                return True
+            else:
+                sms = self.client.messages.create(
+                    body=message,
+                    from_=self.phone_number,
+                    to=to_phone
+                )
+                
+                logger.info(f"SMS sent to {to_phone}: {sms.sid}")
+                return True
         
         except Exception as e:
             logger.error(f"Failed to send SMS: {str(e)}")
@@ -36,7 +42,7 @@ class TwilioService:
             # This is to prevent API failures if SMS sending fails
             return False
     
-    async def send_notification(self, to_phone: str, notification_type: str, **kwargs) -> bool:
+    async def send_notification(self, notification_type: str, **kwargs) -> bool:
         """
         Send a predefined notification based on type
         """
@@ -57,7 +63,7 @@ class TwilioService:
         # Format the message with provided kwargs
         try:
             message = templates[notification_type].format(**kwargs)
-            return await self.send_sms(to_phone, message)
+            return await self.send_sms(message)
         
         except KeyError as e:
             logger.error(f"Missing parameter for notification template: {str(e)}")
