@@ -108,17 +108,40 @@ async def get_all_applications(
         query = query.where(RagpickerApplication.status == status)
         
     result = await db.execute(query)
-    return result.scalars().all()
+    applications = result.scalars().all()
+    
+    # Convert enum values to strings and handle None values for updated_at
+    formatted_applications = []
+    for app in applications:
+        app_dict = {
+            "id": app.id,
+            "clerk_id": app.clerk_id,
+            "document_url": app.document_url,
+            "notes": app.notes,
+            "status": app.status.value if app.status else "PENDING",
+            "created_at": app.created_at,
+            "updated_at": app.updated_at or datetime.utcnow()
+        }
+        formatted_applications.append(app_dict)
+    
+    return formatted_applications
 
 @router.post("/admin/applications/{application_id}/review", status_code=status.HTTP_200_OK)
 async def review_application(
     application_id: int,
-    status: ApplicationStatus,
+    status: str,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Approve or reject a ragpicker application (Admin only)
     """
+    # Validate status value
+    if status not in ["PENDING", "ACCEPTED", "REJECTED"]:
+        raise HTTPException(
+            status_code=400, 
+            detail="Status must be one of: PENDING, ACCEPTED, REJECTED"
+        )
+        
     # Get application
     result = await db.execute(
         select(RagpickerApplication)
@@ -133,7 +156,7 @@ async def review_application(
     application.status = status
     application.updated_at = datetime.utcnow()
     
-    if status == ApplicationStatus.APPROVED:
+    if status == "ACCEPTED":
         # Get associated user
         user_result = await db.execute(
             select(User)
@@ -158,4 +181,4 @@ async def review_application(
     db.add(application)
     await db.commit()
     
-    return {"message": f"Application {status.value} successfully"}
+    return {"message": f"Application {status} successfully"}

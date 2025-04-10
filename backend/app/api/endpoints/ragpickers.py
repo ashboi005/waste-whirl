@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-@router.get("/", response_model=List[RagpickerListResponse])
+@router.get("/all-ragpickers", response_model=List[RagpickerListResponse])
 async def get_ragpickers(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
     """
     Get all ragpickers, optionally filtered by location
