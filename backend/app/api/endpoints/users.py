@@ -4,7 +4,7 @@ from sqlalchemy.future import select
 from app.db.database import get_db
 from app.models.user import User, UserDetails
 from app.schemas.user import UserCreate, UserResponse, UserDetailsCreate, UserDetailsResponse
-from app.services.s3 import upload_base64_image_to_s3, delete_file
+from app.services.s3 import upload_base64_image_to_s3, delete_file, is_url
 from typing import List, Dict
 import logging
 
@@ -124,18 +124,18 @@ async def create_user_details(clerk_id: str, details: UserDetailsCreate, db: Asy
         )
     
     # Process base64 image if provided
-    profile_pic_filename = None
+    profile_pic_url = None
     if details.base64_image:
         try:
             logger.info(f"Processing base64 image upload for user {clerk_id}")
             # Use jpg as default if no extension provided
             file_ext = details.file_extension if details.file_extension else "jpg"
-            profile_pic_filename = await upload_base64_image_to_s3(
+            profile_pic_url = await upload_base64_image_to_s3(
                 base64_image=details.base64_image,
                 file_extension=file_ext,
                 folder="profiles"
             )
-            logger.info(f"Successfully uploaded image for user {clerk_id}: {profile_pic_filename}")
+            logger.info(f"Successfully uploaded image for user {clerk_id}: {profile_pic_url}")
         except Exception as e:
             logger.error(f"Failed to upload base64 image: {str(e)}")
             raise HTTPException(
@@ -149,7 +149,7 @@ async def create_user_details(clerk_id: str, details: UserDetailsCreate, db: Asy
     
     if existing_details:
         # If updating with a new profile pic, delete the old one if it exists
-        if profile_pic_filename and existing_details.profile_pic_url:
+        if profile_pic_url and existing_details.profile_pic_url:
             try:
                 await delete_file(existing_details.profile_pic_url, folder="profiles")
                 logger.info(f"Deleted old profile picture: {existing_details.profile_pic_url}")
@@ -160,8 +160,8 @@ async def create_user_details(clerk_id: str, details: UserDetailsCreate, db: Asy
         existing_details.phone = details.phone
         existing_details.address = details.address
         existing_details.bio = details.bio
-        if profile_pic_filename:
-            existing_details.profile_pic_url = profile_pic_filename
+        if profile_pic_url:
+            existing_details.profile_pic_url = profile_pic_url
         user_details = existing_details
     else:
         # Create new user details
@@ -170,7 +170,7 @@ async def create_user_details(clerk_id: str, details: UserDetailsCreate, db: Asy
             phone=details.phone,
             address=details.address,
             bio=details.bio,
-            profile_pic_url=profile_pic_filename
+            profile_pic_url=profile_pic_url
         )
         db.add(user_details)
     
@@ -233,18 +233,18 @@ async def update_user_details(clerk_id: str, details: UserDetailsCreate, db: Asy
         )
     
     # Process base64 image if provided
-    profile_pic_filename = None
+    profile_pic_url = None
     if details.base64_image:
         try:
             logger.info(f"Processing base64 image upload for user {clerk_id}")
             # Use jpg as default if no extension provided
             file_ext = details.file_extension if details.file_extension else "jpg"
-            profile_pic_filename = await upload_base64_image_to_s3(
+            profile_pic_url = await upload_base64_image_to_s3(
                 base64_image=details.base64_image,
                 file_extension=file_ext,
                 folder="profiles"
             )
-            logger.info(f"Successfully uploaded image for user {clerk_id}: {profile_pic_filename}")
+            logger.info(f"Successfully uploaded image for user {clerk_id}: {profile_pic_url}")
             
             # Delete old profile picture if it exists
             if user_details.profile_pic_url:
@@ -264,8 +264,8 @@ async def update_user_details(clerk_id: str, details: UserDetailsCreate, db: Asy
     user_details.phone = details.phone
     user_details.address = details.address
     user_details.bio = details.bio
-    if profile_pic_filename:
-        user_details.profile_pic_url = profile_pic_filename
+    if profile_pic_url:
+        user_details.profile_pic_url = profile_pic_url
     
     await db.commit()
     await db.refresh(user_details)
