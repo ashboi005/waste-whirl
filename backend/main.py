@@ -8,8 +8,13 @@ from fastapi import HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.requests import Request
 import logging
-from app.core.config import ENVIRONMENT, DATABASE_URL
 
+from app.api.api import api_router
+from app.api.admin import admin_router
+from app.api.img_process import img_process_router
+from app.core.config import ENVIRONMENT, PROJECT_NAME, API_V1_STR, DATABASE_URL
+
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -22,7 +27,7 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json",  
     servers=[
-        {"url": "", "description": "Production Server"},
+        {"url": "https://oz0llkpspd.execute-api.ap-south-1.amazonaws.com/Prod/", "description": "Production Server"},
         {"url": "http://localhost:8000", "description": "Local Development Server"},
     ],
 )
@@ -47,13 +52,16 @@ async def startup_db_client():
     else:
         logger.warning("DATABASE_URL is not set! Using fallback database.")
     
+    # Check if .env file exists at the correct location
     if os.path.isfile(".env"):
         logger.info(".env file found.")
     else:
         logger.warning(".env file not found in working directory!")
         
+    # Print current working directory for debugging
     logger.info(f"Current working directory: {os.getcwd()}")
     
+    # List all env vars (not for production!)
     if ENVIRONMENT != "production":
         env_vars = {k: v for k, v in os.environ.items() if "SECRET" not in k and "KEY" not in k and "PASSWORD" not in k}
         logger.info(f"Environment variables: {env_vars}")
@@ -84,9 +92,15 @@ async def api_documentation(request: Request):
 </html>"""
     )
 
+# Static files and templates setup
 if ENVIRONMENT == "development":
     app.mount("/static", StaticFiles(directory="app/static"), name="static")
     templates = Jinja2Templates(directory="app/templates")
+
+# Include API routers
+app.include_router(api_router)
+app.include_router(admin_router, prefix="/admin")
+app.include_router(img_process_router, prefix="/img_process")
 
 @app.get("/")
 async def root():
@@ -96,6 +110,7 @@ async def root():
 async def health_check():
     return {"status": "healthy"}
 
+# AWS Lambda handler
 handler = Mangum(app)
 
 if __name__ == "__main__":

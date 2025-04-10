@@ -16,6 +16,8 @@ config.set_main_option("sqlalchemy.url", SYNC_DATABASE_URL)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+from app.models.user import User, UserDetails, CustomerDetails, RagpickerDetails, Balances, CompanyBalances, Reviews, Requests, Tips
+from app.models.sensor import Sensor, SensorLog
 from app.db.database import Base
 
 target_metadata = Base.metadata
