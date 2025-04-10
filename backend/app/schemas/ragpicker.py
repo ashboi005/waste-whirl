@@ -42,6 +42,27 @@ class RagpickerListResponse(BaseModel):
     class Config:
         from_attributes = True 
 
+class RagpickerDetailedResponse(BaseModel):
+    # Ragpicker details
+    clerkId: str
+    wallet_address: Optional[str] = None
+    RFID: Optional[str] = None
+    average_rating: float = 0.0
+    
+    # User details
+    firstName: str
+    lastName: str
+    email: str
+    role: str
+    
+    # UserDetails fields
+    profile_pic_url: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
 class RagpickerApplicationBase(BaseModel):
     clerk_id: str
     document_url: str

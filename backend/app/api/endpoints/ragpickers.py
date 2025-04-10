@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.db.database import get_db
 from app.models.user import User, RagpickerDetails, Balances, Reviews, UserDetails
-from app.schemas.ragpicker import RagpickerDetailsCreate, RagpickerDetailsUpdate, RagpickerDetailsResponse, RagpickerListResponse, RagpickerBalanceResponse
+from app.schemas.ragpicker import RagpickerDetailsCreate, RagpickerDetailsUpdate, RagpickerDetailsResponse, RagpickerListResponse, RagpickerBalanceResponse, RagpickerDetailedResponse
 from typing import List
 import logging
 
@@ -112,13 +112,14 @@ async def create_ragpicker_details(clerk_id: str, details: RagpickerDetailsCreat
         average_rating=avg_rating
     )
 
-@router.get("/{clerk_id}/details", response_model=RagpickerDetailsResponse)
+@router.get("/{clerk_id}/details", response_model=RagpickerDetailedResponse)
 async def get_ragpicker_details(clerk_id: str, db: AsyncSession = Depends(get_db)):
     """
-    Get ragpicker details by clerk ID
+    Get comprehensive ragpicker details by clerk ID, including user information and profile details
     """
-    # Check if user exists
-    result = await db.execute(select(User).where(User.clerkId == clerk_id))
+    # Check if user exists and get user data
+    user_query = select(User).where(User.clerkId == clerk_id)
+    result = await db.execute(user_query)
     user = result.scalars().first()
     
     if not user:
@@ -128,7 +129,8 @@ async def get_ragpicker_details(clerk_id: str, db: AsyncSession = Depends(get_db
         )
     
     # Get ragpicker details
-    result = await db.execute(select(RagpickerDetails).where(RagpickerDetails.clerkId == clerk_id))
+    ragpicker_query = select(RagpickerDetails).where(RagpickerDetails.clerkId == clerk_id)
+    result = await db.execute(ragpicker_query)
     ragpicker_details = result.scalars().first()
     
     if not ragpicker_details:
@@ -137,16 +139,43 @@ async def get_ragpicker_details(clerk_id: str, db: AsyncSession = Depends(get_db
             detail=f"Ragpicker details for clerk ID {clerk_id} not found"
         )
     
+    # Get user details
+    user_details_query = select(UserDetails).where(UserDetails.clerkId == clerk_id)
+    result = await db.execute(user_details_query)
+    user_details = result.scalars().first()
+    
+    # Default values if user_details is not found
+    profile_pic_url = None
+    address = None
+    phone = None
+    
+    if user_details:
+        profile_pic_url = user_details.profile_pic_url
+        address = user_details.address
+        phone = user_details.phone
+    
     # Ensure average_rating is always a valid float
     avg_rating = 0.0
     if ragpicker_details.average_rating is not None:
         avg_rating = ragpicker_details.average_rating
     
-    return RagpickerDetailsResponse(
+    return RagpickerDetailedResponse(
+        # Ragpicker details
         clerkId=ragpicker_details.clerkId,
         wallet_address=ragpicker_details.wallet_address,
         RFID=ragpicker_details.RFID,
-        average_rating=avg_rating
+        average_rating=avg_rating,
+        
+        # User details
+        firstName=user.firstName,
+        lastName=user.lastName,
+        email=user.email,
+        role=user.role,
+        
+        # User profile details
+        profile_pic_url=profile_pic_url,
+        address=address,
+        phone=phone
     )
 
 @router.put("/{clerk_id}/details", response_model=RagpickerDetailsResponse)
