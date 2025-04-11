@@ -392,7 +392,11 @@
                     setTimeout(function() {
                         // Determine correct path based on environment
                         const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-                        const basePath = isProduction ? '/Prod/templates/thank-you' : '/templates/thank-you';
+                        // Use absolute URL to avoid path resolution issues
+                        const basePath = isProduction 
+                            ? `${window.location.origin}/Prod/templates/thank-you` 
+                            : `${window.location.origin}/templates/thank-you`;
+                        console.log('Redirecting to:', basePath);
                         window.location.href = basePath;
                     }, 2000);
                 } catch (error) {

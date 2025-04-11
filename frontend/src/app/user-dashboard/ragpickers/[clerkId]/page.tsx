@@ -22,9 +22,19 @@ import { getRagpickerDetails, getRagpickers, getRagpickerReviews, createRequest,
 import type { RagpickerDetails, RagpickerSummary, Review } from "@/lib/api"
 import { toast } from "@/hooks/use-toast"
 
+// Extend the RagpickerDetails type to include additional properties
+interface ExtendedRagpickerDetails extends RagpickerDetails {
+  completion_rate?: string;
+  response_time?: string;
+  member_since?: string;
+  pickups_completed?: number;
+  bio?: string;
+  services?: string[];
+}
+
 export default function RagpickerProfile({ params }: { params: { clerkId: string } }) {
   const [ragpicker, setRagpicker] = useState<RagpickerSummary | null>(null)
-  const [details, setDetails] = useState<RagpickerDetails | null>(null)
+  const [details, setDetails] = useState<ExtendedRagpickerDetails | null>(null)
   const [reviews, setReviews] = useState<Review[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [rating, setRating] = useState<number>(5)
@@ -47,7 +57,7 @@ export default function RagpickerProfile({ params }: { params: { clerkId: string
 
         // Fetch ragpicker details
         const ragpickerDetailsData = await getRagpickerDetails(params.clerkId)
-        setDetails(ragpickerDetailsData)
+        setDetails(ragpickerDetailsData as ExtendedRagpickerDetails)
 
         // Fetch ragpicker reviews
         const reviewsData = await getRagpickerReviews(params.clerkId)
@@ -230,7 +240,7 @@ export default function RagpickerProfile({ params }: { params: { clerkId: string
                       <RadioGroup
                         defaultValue="5"
                         className="flex space-x-2"
-                        onValueChange={(value) => setRating(Number.parseInt(value))}
+                        onValueChange={(value: string) => setRating(Number.parseInt(value))}
                       >
                         {[1, 2, 3, 4, 5].map((value) => (
                           <div key={value} className="flex flex-col items-center">
@@ -338,7 +348,7 @@ export default function RagpickerProfile({ params }: { params: { clerkId: string
                     <h3 className="text-lg font-medium mb-2">Services</h3>
                     <ul className="list-disc list-inside text-gray-600 space-y-1">
                       {details?.services ? (
-                        details.services.map((service, index) => (
+                        details.services!.map((service: string, index: number) => (
                           <li key={index}>{service}</li>
                         ))
                       ) : (
