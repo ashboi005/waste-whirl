@@ -140,7 +140,15 @@
             
             // Try to load existing wallet address
             try {
-                const response = await fetch(`http://localhost:8000/ragpickers/${clerkId}/details`);
+                // Determine API base URL based on environment
+                const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+                const API_BASE = isProduction 
+                    ? 'https://ohmsi5xapc.execute-api.ap-south-1.amazonaws.com/Prod'
+                    : 'http://localhost:8000';
+                    
+                console.log('Using API URL for fetch:', API_BASE);
+                
+                const response = await fetch(`${API_BASE}/ragpickers/${clerkId}/details`);
                 if (response.ok) {
                     const data = await response.json();
                     document.getElementById('wallet_address').value = data.wallet_address || '';
@@ -169,7 +177,15 @@
                 statusMessage.style.display = 'none';
                 
                 try {
-                    const response = await fetch(`http://localhost:8000/ragpickers/${clerkId}/details`, {
+                    // Determine API base URL based on environment
+                    const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+                    const API_BASE = isProduction 
+                        ? 'https://ohmsi5xapc.execute-api.ap-south-1.amazonaws.com/Prod'
+                        : 'http://localhost:8000';
+                        
+                    console.log('Using API URL for submit:', API_BASE);
+                    
+                    const response = await fetch(`${API_BASE}/ragpickers/${clerkId}/details`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',

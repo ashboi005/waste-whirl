@@ -151,7 +151,7 @@
         document.getElementById('profileForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const clerkId = 'string'; // Replace with actual Clerk ID
+            const clerkId = 'string'; 
             const phone = document.getElementById('phone').value;
             const address = document.getElementById('address').value;
             const bio = document.getElementById('bio').value;
@@ -159,7 +159,14 @@
             document.getElementById('loading').style.display = 'block';
 
             try {
-                const API_BASE = 'http://localhost:8000'; // FastAPI default port
+                // Determine API base URL based on environment
+                const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+                const API_BASE = isProduction 
+                    ? 'https://ohmsi5xapc.execute-api.ap-south-1.amazonaws.com/Prod'
+                    : 'http://localhost:8000';
+                    
+                console.log('Using API URL:', API_BASE);
+                
                 const response = await fetch(`${API_BASE}/users/${clerkId}/details`, {
                     method: 'POST',
                     headers: {
@@ -192,8 +199,17 @@
         // Initial load: Fetch existing profile data
         window.onload = async () => {
             const clerkId = 'string'; // Replace with actual Clerk ID
+            
+            // Determine API base URL based on environment
+            const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+            const API_BASE = isProduction 
+                ? 'https://ohmsi5xapc.execute-api.ap-south-1.amazonaws.com/Prod'
+                : 'http://localhost:8000';
+                
+            console.log('Using API URL for profile fetch:', API_BASE);
+            
             try {
-                const response = await fetch(`/users/${clerkId}/details`);
+                const response = await fetch(`${API_BASE}/users/${clerkId}/details`);
                 if (response.ok) {
                     const data = await response.json();
                     document.getElementById('phone').value = data.phone || '';
