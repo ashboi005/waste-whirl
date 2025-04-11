@@ -469,6 +469,7 @@ async def assign_rfid(
         logger.info(f"Assigning RFID for application {application_id}: {rfid}")
         
         # Get the application to find the associated clerkId
+        # Get the application to find the associated clerkId
         stmt = select(RagpickerApplication).where(RagpickerApplication.id == application_id)
         result = await db.execute(stmt)
         application = result.scalar_one_or_none()
@@ -479,10 +480,11 @@ async def assign_rfid(
                 detail=f"Application with id {application_id} not found"
             )
         
-        # Get clerk_id from the application
+        # Get the clerk_id from the application
         clerk_id = application.clerk_id
+        logger.info(f"Found application for clerk_id: {clerk_id}")
         
-        # Update RFID directly in the RagpickerDetails table
+        # Get the ragpicker details using the clerk_id
         stmt = select(RagpickerDetails).where(RagpickerDetails.clerkId == clerk_id)
         result = await db.execute(stmt)
         ragpicker_details = result.scalar_one_or_none()
@@ -490,6 +492,7 @@ async def assign_rfid(
         if not ragpicker_details:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Ragpicker details for clerk_id {clerk_id} not found"
                 detail=f"Ragpicker details for clerk_id {clerk_id} not found"
             )
         
