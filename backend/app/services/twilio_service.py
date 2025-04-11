@@ -47,13 +47,17 @@ class TwilioService:
         Send a predefined notification based on type
         """
         templates = {
+            # Customer notifications
             "request_created": "Your garbage collection request has been created. A ragpicker will respond soon.",
-            "request_accepted": "Good news! Your garbage collection request has been accepted by {ragpicker_name}.",
-            "request_rejected": "Your garbage collection request has been rejected. Please try booking another ragpicker.",
-            "request_completed": "Your garbage collection request has been marked as completed. Thank you for using Waste Whirl!",
-            "new_request": "New garbage collection request from {customer_name}. Please check your app to respond.",
-            "tip_received": "You received a tip of ${amount} from {customer_name}. Thank you!",
-            "balance_updated": "Your account balance has been updated. New balance: ${balance}."
+            "request_accepted": "Good news! Your garbage collection request #{request_id} has been accepted by {ragpicker_name}. They will arrive at {customer_address} soon.",
+            "request_rejected": "Your garbage collection request #{request_id} has been rejected by {ragpicker_name}. Please try booking another ragpicker.",
+            "request_completed_customer": "Your garbage collection request #{request_id} with {ragpicker_name} has been marked as completed. {amount} tokens have been transferred. Your new balance: {new_balance} tokens. Thank you for using Waste Whirl!",
+            
+            # Ragpicker notifications
+            "new_request": "New garbage collection request #{request_id} from {customer_name} at {customer_address}. Please check your app to respond.",
+            "request_completed_ragpicker": "Request #{request_id} from {customer_name} has been marked as completed. You received {amount} tokens. Your new balance: {new_balance} tokens.",
+            "tip_received": "You received a tip of {amount} tokens from {customer_name}. Thank you!",
+            "balance_updated": "Your account balance has been updated. New balance: {balance} tokens."
         }
         
         if notification_type not in templates:
@@ -63,6 +67,7 @@ class TwilioService:
         # Format the message with provided kwargs
         try:
             message = templates[notification_type].format(**kwargs)
+            logger.info(f"Sending notification of type '{notification_type}': {message}")
             return await self.send_sms(message)
         
         except KeyError as e:
