@@ -208,13 +208,6 @@ async def update_smart_contract(request_id: int, contract_data: SmartContractUpd
             detail=f"Request with ID {request_id} not found"
         )
     
-    # Check if request status is ACCEPTED
-    if request.status != "ACCEPTED":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Smart contract can only be added to ACCEPTED requests"
-        )
-    
     # Update smart contract address
     request.smart_contract_address = contract_data.smart_contract_address
     request.updated_at = datetime.now()
