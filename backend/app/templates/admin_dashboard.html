@@ -1,0 +1,280 @@
+<!-- app/templates/admin_dashboard.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --success: #2e7d32;
+            --danger: #d32f2f;
+            --background: #f5f5f5;
+            --card-bg: #ffffff;
+            --text: #333333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: var(--primary);
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .applications-list {
+            display: grid;
+            gap: 20px;
+        }
+
+        .application-card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 20px;
+        }
+
+        .application-content {
+            flex: 1;
+        }
+
+        .document-preview {
+            max-width: 200px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+        }
+
+        .document-preview img {
+            max-width: 100%;
+            max-height: 150px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-accepted {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-rejected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .btn-accept {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-reject {
+            background: var(--danger);
+            color: white;
+        }
+
+        .rfid-input {
+            display: none;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .rfid-input input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 200px;
+        }
+
+        .btn-save-rfid {
+            background: var(--primary);
+            color: white;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .error-message {
+            color: var(--danger);
+            margin: 10px 0;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ragpicker Applications Review</h1>
+        
+        <div class="applications-list" id="applicationsContainer">
+            <!-- Applications will be loaded here -->
+        </div>
+
+        <div class="loading" id="loading">
+            Loading applications...
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const loading = document.getElementById('loading');
+            const errorMessage = document.getElementById('errorMessage');
+            const container = document.getElementById('applicationsContainer');
+
+            async function loadApplications() {
+                try {
+                    loading.style.display = 'block';
+                    errorMessage.style.display = 'none';
+
+                    const response = await fetch('/admin/applications/?status=PENDING');
+                    if (!response.ok) throw new Error('Failed to load applications');
+                    
+                    const applications = await response.json();
+                    renderApplications(applications);
+                } catch (error) {
+                    errorMessage.textContent = error.message;
+                    errorMessage.style.display = 'block';
+                } finally {
+                    loading.style.display = 'none';
+                }
+            }
+
+            function renderApplications(applications) {
+                container.innerHTML = applications.map(app => `
+                    <div class="application-card" data-id="${app.id}">
+                        <div class="document-preview">
+                            ${app.document_url.endsWith('.pdf') ? 
+                                `<a href="${app.document_url}" target="_blank">View PDF</a>` :
+                                `<img src="${app.document_url}" alt="Application Document">`}
+                        </div>
+                        <div class="application-content">
+                            <h3>Application #${app.id}</h3>
+                            <p><strong>User ID:</strong> ${app.clerk_id}</p>
+                            <p><strong>Notes:</strong> ${app.notes}</p>
+                            <div class="status-indicator status-${app.status.toLowerCase()}">
+                                ${app.status}
+                            </div>
+                            <div class="actions">
+                                <button class="btn-accept" onclick="handleAccept(${app.id})">Accept</button>
+                                <button class="btn-reject" onclick="handleReject(${app.id})">Reject</button>
+                            </div>
+                            <div class="rfid-input" id="rfidInput-${app.id}">
+                                <input type="text" placeholder="Enter RFID number" id="rfid-${app.id}">
+                                <button class="btn-save-rfid" onclick="saveRFID(${app.id})">Assign RFID</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            window.handleAccept = async (appId) => {
+                try {
+                    const response = await fetch(`/admin/applications/${appId}/review`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ status: 'ACCEPTED' })
+                    });
+
+                    if (!response.ok) throw new Error('Acceptance failed');
+                    
+                    // Show RFID input
+                    const rfidInput = document.getElementById(`rfidInput-${appId}`);
+                    rfidInput.style.display = 'flex';
+                    
+                    // Hide action buttons
+                    const card = document.querySelector(`[data-id="${appId}"]`);
+                    card.querySelector('.actions').style.display = 'none';
+                } catch (error) {
+                    alert(error.message);
+                }
+            };
+
+            window.handleReject = async (appId) => {
+                if (!confirm('Are you sure you want to reject this application?')) return;
+                
+                try {
+                    const response = await fetch(`/admin/applications/${appId}/review`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ status: 'REJECTED' })
+                    });
+
+                    if (!response.ok) throw new Error('Rejection failed');
+                    
+                    // Remove the application card
+                    document.querySelector(`[data-id="${appId}"]`).remove();
+                } catch (error) {
+                    alert(error.message);
+                }
+            };
+
+            window.saveRFID = async (appId) => {
+                const rfid = document.getElementById(`rfid-${appId}`).value;
+                if (!rfid) {
+                    alert('Please enter an RFID number');
+                    return;
+                }
+
+                try {
+                    // Update RFID in your database (implement this endpoint)
+                    const response = await fetch(`/ragpickers/${appId}/rfid`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ rfid })
+                    });
+
+                    if (!response.ok) throw new Error('RFID assignment failed');
+                    
+                    alert('RFID assigned successfully!');
+                    document.querySelector(`[data-id="${appId}"]`).remove();
+                } catch (error) {
+                    alert(error.message);
+                }
+            };
+
+            // Initial load
+            loadApplications();
+        });
+    </script>
+</body>
+</html>
