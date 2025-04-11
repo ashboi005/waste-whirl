@@ -1,6 +1,5 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import Optional
-from app.models.user import ApplicationStatus
 from datetime import datetime
 
 class RagpickerDetailsBase(BaseModel):
@@ -43,11 +42,38 @@ class RagpickerListResponse(BaseModel):
     class Config:
         from_attributes = True 
 
+class RagpickerDetailedResponse(BaseModel):
+    # Ragpicker details
+    clerkId: str
+    wallet_address: Optional[str] = None
+    RFID: Optional[str] = None
+    average_rating: float = 0.0
+    
+    # User details
+    firstName: str
+    lastName: str
+    email: str
+    role: str
+    
+    # UserDetails fields
+    profile_pic_url: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
 class RagpickerApplicationBase(BaseModel):
     clerk_id: str
     document_url: str
     notes: str
-    status: ApplicationStatus
+    status: str
+
+    @validator('status')
+    def validate_status(cls, v):
+        if v not in ["PENDING", "ACCEPTED", "REJECTED"]:
+            raise ValueError('Status must be one of: PENDING, ACCEPTED, REJECTED')
+        return v
 
 class RagpickerApplicationCreate(RagpickerApplicationBase):
     pass

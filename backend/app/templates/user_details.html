@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile Setup</title>
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --primary-dark: #1557b0;
+            --error: #e74c3c;
+            --background: #f0f2f5;
+            --card-bg: #FFFFFF;
+            --text: #333333;
+            --border: #e0e0e0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: var(--primary);
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text);
+            font-weight: 500;
+        }
+        
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 16px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+        
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+        
+        .file-upload {
+            border: 2px dashed var(--border);
+            padding: 20px;
+            text-align: center;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+            position: relative;
+            background-color: #f9f9f9;
+        }
+        
+        .file-upload:hover {
+            border-color: var(--primary);
+            background-color: rgba(26, 115, 232, 0.05);
+        }
+        
+        .file-upload p {
+            margin: 5px 0;
+        }
+        
+        .file-upload p:first-of-type {
+            font-weight: bold;
+            color: var(--primary);
+        }
+        
+        #fileInput {
+            position: absolute;
+            left: -9999px;
+            top: -9999px;
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        #preview {
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: 50%;
+            margin: 20px auto;
+            display: none;
+        }
+        
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: var(--primary-dark);
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+            color: var(--text);
+        }
+        
+        .error-message {
+            color: var(--error);
+            margin-top: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Profile Setup</h1>
+        
+        <div class="form-group">
+            <div class="file-upload" id="dropArea">
+                <input type="file" id="fileInput" accept="image/*">
+                <p>Click to upload profile picture</p>
+                <p id="fileInfo">No file selected</p>
+            </div>
+            <img id="preview" alt="Profile Preview">
+        </div>
+
+        <form id="profileForm">
+            <div class="form-group">
+                <label for="phone">Phone Number</label>
+                <input type="tel" id="phone" required pattern="[0-9]{10}" title="Please enter a 10-digit phone number">
+                <div id="phoneError" class="error-message"></div>
+            </div>
+
+            <div class="form-group">
+                <label for="address">Address</label>
+                <input type="text" id="address" required minlength="5">
+                <div id="addressError" class="error-message"></div>
+            </div>
+
+            <div class="form-group">
+                <label for="bio">Bio</label>
+                <textarea id="bio" placeholder="Tell us about yourself..."></textarea>
+            </div>
+
+            <div class="loading" id="loading">
+                Saving profile...
+            </div>
+
+            <button type="submit" id="submitBtn">Save Profile</button>
+        </form>
+    </div>
+
+    <script>
+        // Check if clerk ID is available and valid
+        function getClerkId() {
+            const clerkId = localStorage.getItem('clerkId');
+            const expiry = localStorage.getItem('clerkId_expiry');
+            
+            // Check if stored and not expired
+            if (clerkId && expiry && parseInt(expiry) > Date.now()) {
+                return clerkId;
+            }
+            
+            // Determine correct path based on environment
+            const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+            const basePath = isProduction ? '/Prod/templates/' : '/templates/';
+            
+            // If no valid clerk ID, redirect to index
+            alert('Your session has expired or is invalid. Please log in again.');
+            window.location.href = basePath;
+            return null;
+        }
+
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        const dropArea = document.getElementById('dropArea');
+        const fileInfo = document.getElementById('fileInfo');
+        let base64Image = null;
+        let fileExtension = null;
+
+        // Make the dropArea clickable
+        dropArea.addEventListener('click', function() {
+            console.log('Drop area clicked, triggering file input click');
+            fileInput.click();
+        });
+        
+        // Drag and drop functionality
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, highlight, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, unhighlight, false);
+        });
+        
+        function highlight() {
+            dropArea.style.borderColor = '#1a73e8';
+            dropArea.style.backgroundColor = 'rgba(26, 115, 232, 0.1)';
+        }
+        
+        function unhighlight() {
+            dropArea.style.borderColor = '';
+            dropArea.style.backgroundColor = '#f9f9f9';
+        }
+        
+        dropArea.addEventListener('drop', function(e) {
+            console.log('File dropped');
+            const dt = e.dataTransfer;
+            if (dt.files.length) {
+                fileInput.files = dt.files;
+                handleFile(dt.files[0]);
+            }
+        });
+        
+        // Handle file processing in a separate function
+        function handleFile(file) {
+            if (!file) return;
+            
+            console.log('Handling file:', file.name, file.type, file.size);
+            
+            // Validate file
+            const maxSize = 5 * 1024 * 1024; // 5MB
+            if (file.size > maxSize) {
+                alert('File size exceeds 5MB limit');
+                return;
+            }
+            
+            fileInfo.textContent = `Selected: ${file.name}`;
+            
+            const reader = new FileReader();
+            fileExtension = file.name.split('.').pop().toLowerCase();
+            
+            reader.onload = function(e) {
+                console.log('File loaded as data URL');
+                base64Image = e.target.result.split(',')[1];
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+            };
+            
+            reader.readAsDataURL(file);
+        }
+
+        // Handle file selection
+        fileInput.addEventListener('change', function(e) {
+            console.log('File input change triggered', e.target.files);
+            if (e.target.files.length) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        // Handle form submission
+        document.getElementById('profileForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const clerkId = getClerkId();
+            if (!clerkId) return; // Will redirect in getClerkId function
+            
+            const phone = document.getElementById('phone').value;
+            const address = document.getElementById('address').value;
+            const bio = document.getElementById('bio').value;
+
+            document.getElementById('loading').style.display = 'block';
+
+            try {
+                // Determine API base URL based on environment
+                const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+                const API_BASE = isProduction 
+                    ? 'https://ohmsi5xapc.execute-api.ap-south-1.amazonaws.com/Prod'
+                    : 'http://localhost:8000';
+                    
+                console.log('Using API URL:', API_BASE);
+                
+                const response = await fetch(`${API_BASE}/users/${clerkId}/details`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        phone: phone,
+                        address: address,
+                        bio: bio,
+                        base64_image: base64Image,
+                        file_extension: fileExtension
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                const result = await response.json();
+                alert('Profile saved successfully!');
+                
+                // Redirect to ragpicker details page
+                const basePath = isProduction ? '/Prod/templates/ragpicker-wallet' : '/templates/ragpicker-wallet';
+                window.location.href = basePath;
+            } catch (error) {
+                console.error('Error:', error);
+                alert(`Error saving profile: ${error.message}`);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        });
+
+        // Initial load: Fetch existing profile data
+        window.onload = async () => {
+            const clerkId = getClerkId();
+            if (!clerkId) return; // Will redirect in getClerkId function
+            
+            // Determine API base URL based on environment
+            const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+            const API_BASE = isProduction 
+                ? 'https://ohmsi5xapc.execute-api.ap-south-1.amazonaws.com/Prod'
+                : 'http://localhost:8000';
+                
+            console.log('Using API URL for profile fetch:', API_BASE);
+            
+            try {
+                const response = await fetch(`${API_BASE}/users/${clerkId}/details`);
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('phone').value = data.phone || '';
+                    document.getElementById('address').value = data.address || '';
+                    document.getElementById('bio').value = data.bio || '';
+                    if (data.profile_pic_url) {
+                        preview.src = data.profile_pic_url;
+                        preview.style.display = 'block';
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching profile:', error);
+            }
+        };
+    </script>
+</body>
+</html>

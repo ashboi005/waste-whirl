@@ -18,6 +18,12 @@ Parameters:
   AWSCloudfrontURL:
     Type: String
     Description: "CloudFront URL for serving S3 files"
+  ClerkSecretKey:
+    Type: String
+    Description: "Clerk Secret Key"
+  ClerkPublishableKey:
+    Type: String
+    Description: "Clerk Publishable Key"
   DatabaseURL:
     Type: String
     Description: "Database connection URL"
@@ -53,6 +59,8 @@ Resources:
           TWILIO_PHONE_NUMBER: !Ref TwilioPhoneNumber
           AWS_S3_BUCKET_NAME: !Ref AWSS3BucketName
           AWS_CLOUDFRONT_URL: !Ref AWSCloudfrontURL
+          CLERK_SECRET_KEY: !Ref ClerkSecretKey
+          CLERK_PUBLISHABLE_KEY: !Ref ClerkPublishableKey
       Events:
         ApiEvent:
           Type: Api

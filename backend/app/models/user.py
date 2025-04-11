@@ -93,6 +93,6 @@ class RagpickerApplication(Base):
     clerk_id = Column(String, ForeignKey("users.clerkId"))
     document_url = Column(String)  # S3 URL for the uploaded PDF
     notes = Column(String)
-    status = Column(Enum(ApplicationStatus), default=ApplicationStatus.PENDING)
+    status = Column(String, default="PENDING")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now()) 

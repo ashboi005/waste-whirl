@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wallet Setup</title>
+    <style>
+        :root {
+            --primary: #2e7d32;
+            --primary-dark: #1b5e20;
+            --error: #d32f2f;
+            --background: #f5f5f5;
+            --card-bg: #FFFFFF;
+            --text: #333333;
+            --border: #e0e0e0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background);
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 500px;
+            margin: 40px auto;
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: var(--primary);
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--text);
+        }
+        
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .status-message {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        
+        .success {
+            background-color: #e8f5e9;
+            color: var(--primary-dark);
+            border-left: 4px solid var(--primary);
+            display: block;
+        }
+        
+        .error {
+            background-color: #ffebee;
+            color: var(--error);
+            border-left: 4px solid var(--error);
+            display: block;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top: 4px solid var(--primary);
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .requirements {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Wallet Setup</h1>
+        
+        <form id="walletForm">
+            <div class="form-group">
+                <label for="wallet_address">Your Wallet Address</label>
+                <input 
+                    type="text" 
+                    id="wallet_address" 
+                    placeholder="Enter your blockchain wallet address (0x...)"
+                    required
+                    pattern="^0x[a-fA-F0-9]{40}$"
+                    title="Please enter a valid Ethereum wallet address (0x followed by 40 hex characters)"
+                >
+                <div class="requirements">Example: 0x742d35Cc6634C0532925a3b844Bc454e4438f44e</div>
+            </div>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Saving your wallet address...</p>
+            </div>
+            
+            <div id="statusMessage" class="status-message"></div>
+            
+            <button type="submit" id="submitBtn">Save Wallet Address</button>
+        </form>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Get the stored Clerk user ID
+            function getClerkId() {
+                const clerkId = localStorage.getItem('clerkId');
+                const expiry = localStorage.getItem('clerkId_expiry');
+                
+                // Check if stored and not expired
+                if (clerkId && expiry && parseInt(expiry) > Date.now()) {
+                    return clerkId;
+                }
+                
+                // Determine correct path based on environment
+                const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+                const basePath = isProduction ? '/Prod/templates/' : '/templates/';
+                
+                // If no valid clerk ID, redirect to index
+                alert('Your session has expired or is invalid. Please log in again.');
+                window.location.href = basePath;
+                return null;
+            }
+            
+            // Initialize with clerk ID
+            const clerkId = getClerkId();
+            if (!clerkId) return; // Will redirect in getClerkId function
+            
+            // Try to load existing wallet address
+            try {
+                // Determine API base URL based on environment
+                const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+                const API_BASE = isProduction 
+                    ? 'https://ohmsi5xapc.execute-api.ap-south-1.amazonaws.com/Prod'
+                    : 'http://localhost:8000';
+                    
+                console.log('Using API URL for fetch:', API_BASE);
+                
+                const response = await fetch(`${API_BASE}/ragpickers/${clerkId}/details`);
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('wallet_address').value = data.wallet_address || '';
+                }
+            } catch (error) {
+                console.error('Error loading existing wallet:', error);
+            }
+            
+            // Form submission handler
+            document.getElementById('walletForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const clerkId = getClerkId();
+                if (!clerkId) return; // Will redirect in getClerkId function
+                
+                const walletAddress = document.getElementById('wallet_address').value;
+                const statusMessage = document.getElementById('statusMessage');
+                const loading = document.getElementById('loading');
+                
+                // Validate wallet address format
+                if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+                    statusMessage.textContent = 'Please enter a valid Ethereum wallet address (0x followed by 40 characters)';
+                    statusMessage.className = 'status-message error';
+                    statusMessage.style.display = 'block';
+                    return;
+                }
+                
+                loading.style.display = 'block';
+                statusMessage.style.display = 'none';
+                
+                try {
+                    // Determine API base URL based on environment
+                    const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+                    const API_BASE = isProduction 
+                        ? 'https://ohmsi5xapc.execute-api.ap-south-1.amazonaws.com/Prod'
+                        : 'http://localhost:8000';
+                        
+                    console.log('Using API URL for submit:', API_BASE);
+                    
+                    const response = await fetch(`${API_BASE}/ragpickers/${clerkId}/details`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            wallet_address: walletAddress
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || 'Failed to save wallet address');
+                    }
+                    
+                    statusMessage.textContent = 'Wallet address saved successfully!';
+                    statusMessage.className = 'status-message success';
+                    
+                    // Redirect to application submission page after 1.5 seconds
+                    setTimeout(function() {
+                        const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+                        const basePath = isProduction ? '/Prod/templates/ragpicker-application' : '/templates/ragpicker-application';
+                        window.location.href = basePath;
+                    }, 1500);
+                } catch (error) {
+                    console.error('Error:', error);
+                    statusMessage.textContent = error.message;
+                    statusMessage.className = 'status-message error';
+                } finally {
+                    loading.style.display = 'none';
+                    statusMessage.style.display = 'block';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

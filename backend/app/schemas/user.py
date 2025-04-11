@@ -3,6 +3,7 @@ from typing import Optional
 from datetime import datetime
 from datetime import datetime
 from enum import Enum
+from pydantic import validator
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -56,15 +57,32 @@ class RagpickerApplicationBase(BaseModel):
     clerk_id: str
     document_url: str
     notes: str
-    status: ApplicationStatus
+
 
 class RagpickerApplicationCreate(RagpickerApplicationBase):
-    pass
+    status: str = "PENDING"
+    
+    @validator('status')
+    def validate_status(cls, v):
+        if v not in ["PENDING", "ACCEPTED", "REJECTED"]:
+            raise ValueError('Status must be one of: PENDING, ACCEPTED, REJECTED')
+        return v
 
-class RagpickerApplicationResponse(RagpickerApplicationBase):
+
+class RagpickerApplicationResponse(BaseModel):
     id: int
+    clerk_id: str
+    document_url: str
+    notes: str
+    status: str
     created_at: datetime
     updated_at: datetime
+
+    @validator('status')
+    def validate_status(cls, v):
+        if v not in ["PENDING", "ACCEPTED", "REJECTED"]:
+            raise ValueError('Status must be one of: PENDING, ACCEPTED, REJECTED')
+        return v
 
     class Config:
         from_attributes = True
