@@ -43,3 +43,11 @@ async def ragpicker_application_page(request: Request):
     """
     logger.info("Serving ragpicker application submission page")
     return templates.TemplateResponse("application_submission.html", {"request": request}) 
+
+@router.get("/thank-you", response_class=HTMLResponse)
+async def ragpicker_application_success_page(request: Request):
+    """
+    Serve the ragpicker application success page
+    """
+    logger.info("Serving ragpicker application success page")
+    return templates.TemplateResponse("thank_you.html", {"request": request})

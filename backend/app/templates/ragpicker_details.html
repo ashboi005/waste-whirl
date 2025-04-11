@@ -163,9 +163,13 @@
                     return clerkId;
                 }
                 
+                // Determine correct path based on environment
+                const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+                const basePath = isProduction ? '/Prod/templates/' : '/templates/';
+                
                 // If no valid clerk ID, redirect to index
                 alert('Your session has expired or is invalid. Please log in again.');
-                window.location.href = '/templates/';
+                window.location.href = basePath;
                 return null;
             }
             
@@ -240,6 +244,13 @@
                     
                     statusMessage.textContent = 'Wallet address saved successfully!';
                     statusMessage.className = 'status-message success';
+                    
+                    // Redirect to application submission page after 1.5 seconds
+                    setTimeout(function() {
+                        const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+                        const basePath = isProduction ? '/Prod/templates/ragpicker-application' : '/templates/ragpicker-application';
+                        window.location.href = basePath;
+                    }, 1500);
                 } catch (error) {
                     console.error('Error:', error);
                     statusMessage.textContent = error.message;

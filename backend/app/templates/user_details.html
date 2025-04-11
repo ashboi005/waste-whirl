@@ -72,6 +72,8 @@
             cursor: pointer;
             transition: all 0.3s;
             margin-bottom: 20px;
+            position: relative;
+            background-color: #f9f9f9;
         }
         
         .file-upload:hover {
@@ -79,8 +81,21 @@
             background-color: rgba(26, 115, 232, 0.05);
         }
         
+        .file-upload p {
+            margin: 5px 0;
+        }
+        
+        .file-upload p:first-of-type {
+            font-weight: bold;
+            color: var(--primary);
+        }
+        
         #fileInput {
-            display: none;
+            position: absolute;
+            left: -9999px;
+            top: -9999px;
+            opacity: 0;
+            pointer-events: none;
         }
         
         #preview {
@@ -171,31 +186,99 @@
                 return clerkId;
             }
             
+            // Determine correct path based on environment
+            const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+            const basePath = isProduction ? '/Prod/templates/' : '/templates/';
+            
             // If no valid clerk ID, redirect to index
             alert('Your session has expired or is invalid. Please log in again.');
-            window.location.href = '/templates/';
+            window.location.href = basePath;
             return null;
         }
 
         const fileInput = document.getElementById('fileInput');
         const preview = document.getElementById('preview');
+        const dropArea = document.getElementById('dropArea');
+        const fileInfo = document.getElementById('fileInfo');
         let base64Image = null;
         let fileExtension = null;
 
+        // Make the dropArea clickable
+        dropArea.addEventListener('click', function() {
+            console.log('Drop area clicked, triggering file input click');
+            fileInput.click();
+        });
+        
+        // Drag and drop functionality
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, highlight, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, unhighlight, false);
+        });
+        
+        function highlight() {
+            dropArea.style.borderColor = '#1a73e8';
+            dropArea.style.backgroundColor = 'rgba(26, 115, 232, 0.1)';
+        }
+        
+        function unhighlight() {
+            dropArea.style.borderColor = '';
+            dropArea.style.backgroundColor = '#f9f9f9';
+        }
+        
+        dropArea.addEventListener('drop', function(e) {
+            console.log('File dropped');
+            const dt = e.dataTransfer;
+            if (dt.files.length) {
+                fileInput.files = dt.files;
+                handleFile(dt.files[0]);
+            }
+        });
+        
+        // Handle file processing in a separate function
+        function handleFile(file) {
+            if (!file) return;
+            
+            console.log('Handling file:', file.name, file.type, file.size);
+            
+            // Validate file
+            const maxSize = 5 * 1024 * 1024; // 5MB
+            if (file.size > maxSize) {
+                alert('File size exceeds 5MB limit');
+                return;
+            }
+            
+            fileInfo.textContent = `Selected: ${file.name}`;
+            
+            const reader = new FileReader();
+            fileExtension = file.name.split('.').pop().toLowerCase();
+            
+            reader.onload = function(e) {
+                console.log('File loaded as data URL');
+                base64Image = e.target.result.split(',')[1];
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+            };
+            
+            reader.readAsDataURL(file);
+        }
+
         // Handle file selection
         fileInput.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                fileExtension = file.name.split('.').pop().toLowerCase();
-                
-                reader.onload = function(e) {
-                    base64Image = e.target.result.split(',')[1];
-                    preview.src = e.target.result;
-                    preview.style.display = 'block';
-                };
-                
-                reader.readAsDataURL(file);
+            console.log('File input change triggered', e.target.files);
+            if (e.target.files.length) {
+                handleFile(e.target.files[0]);
             }
         });
 
@@ -241,7 +324,10 @@
 
                 const result = await response.json();
                 alert('Profile saved successfully!');
-                window.location.reload();
+                
+                // Redirect to ragpicker details page
+                const basePath = isProduction ? '/Prod/templates/ragpicker-wallet' : '/templates/ragpicker-wallet';
+                window.location.href = basePath;
             } catch (error) {
                 console.error('Error:', error);
                 alert(`Error saving profile: ${error.message}`);

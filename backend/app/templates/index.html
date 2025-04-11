@@ -75,8 +75,12 @@
                 localStorage.setItem('clerkId', clerkId);
                 localStorage.setItem('clerkId_expiry', Date.now() + 3600000);
                 
+                // Determine if we're in production or development
+                const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+                const basePath = isProduction ? '/Prod/templates/user-details' : '/templates/user-details';
+                
                 // Redirect to user details
-                window.location.href = '/templates/user-details';
+                window.location.href = basePath;
             } else {
                 document.getElementById('loadingState').style.display = 'none';
                 document.getElementById('errorState').style.display = 'block';
