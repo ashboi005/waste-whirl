@@ -69,13 +69,6 @@ async def create_ragpicker_details(clerk_id: str, details: RagpickerDetailsCreat
             detail=f"User with clerk ID {clerk_id} not found"
         )
     
-    # Check if user is a ragpicker
-    if user.role != "RAGPICKER":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"User with clerk ID {clerk_id} is not a ragpicker"
-        )
-    
     # Check if ragpicker details already exist
     result = await db.execute(select(RagpickerDetails).where(RagpickerDetails.clerkId == clerk_id))
     existing_details = result.scalars().first()
