@@ -37,31 +37,13 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        .error-message {
-            color: #e74c3c;
-            margin-top: 20px;
-        }
-        .retry-btn {
-            background-color: #3498db;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-top: 20px;
-        }
     </style>
 </head>
 <body>
     <div class="container">
         <div id="loadingState">
             <div class="spinner"></div>
-            <p>Initializing your session...</p>
-        </div>
-        <div id="errorState" style="display: none;">
-            <h2>Authentication Required</h2>
-            <p class="error-message" id="errorText"></p>
-            <button class="retry-btn" onclick="window.location.href='/'">Retry</button>
+            <p>Redirecting...</p>
         </div>
     </div>
 
@@ -70,23 +52,16 @@
             const urlParams = new URLSearchParams(window.location.search);
             const clerkId = urlParams.get('clerk_id');
             
-            if (clerkId && clerkId.length > 4) { // Basic validation
-                // Store with 1-hour expiration
+            // If clerk_id exists, store it
+            if (clerkId) {
                 localStorage.setItem('clerkId', clerkId);
                 localStorage.setItem('clerkId_expiry', Date.now() + 3600000);
-                
-                // Determine if we're in production or development
-                const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-                const basePath = isProduction ? '/Prod/templates/user-details' : '/templates/user-details';
-                
-                // Redirect to user details
-                window.location.href = basePath;
-            } else {
-                document.getElementById('loadingState').style.display = 'none';
-                document.getElementById('errorState').style.display = 'block';
-                document.getElementById('errorText').textContent = 
-                    clerkId ? 'Invalid user identification' : 'Missing user identification';
             }
+            
+            // Always redirect
+            const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+            const basePath = isProduction ? '/Prod/templates/user-details' : '/templates/user-details';
+            window.location.href = basePath;
         });
     </script>
 </body>

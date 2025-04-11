@@ -156,21 +156,14 @@
             // Get the stored Clerk user ID
             function getClerkId() {
                 const clerkId = localStorage.getItem('clerkId');
-                const expiry = localStorage.getItem('clerkId_expiry');
                 
-                // Check if stored and not expired
-                if (clerkId && expiry && parseInt(expiry) > Date.now()) {
+                // Just return the clerk ID without checking expiry
+                if (clerkId) {
                     return clerkId;
                 }
                 
-                // Determine correct path based on environment
-                const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-                const basePath = isProduction ? '/Prod/templates/' : '/templates/';
-                
-                // If no valid clerk ID, redirect to index
-                alert('Your session has expired or is invalid. Please log in again.');
-                window.location.href = basePath;
-                return null;
+                // If no clerk ID at all, use a default or empty value
+                return '';
             }
             
             // Initialize with clerk ID

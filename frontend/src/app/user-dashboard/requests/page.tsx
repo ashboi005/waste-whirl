@@ -31,7 +31,7 @@ const RagJobABI = [
 
 export default function UserRequests() {
   // Hardcode the clerkId as a string (customer user)
-  const clerkId = "string"
+  const clerkId = "user_2vZXlUiRU8byiwYo9QPJOzmxHx4"
 
   const [requests, setRequests] = useState<Request[]>([])
   const [filteredRequests, setFilteredRequests] = useState<Request[]>([])

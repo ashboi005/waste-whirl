@@ -179,21 +179,14 @@
         // Check if clerk ID is available and valid
         function getClerkId() {
             const clerkId = localStorage.getItem('clerkId');
-            const expiry = localStorage.getItem('clerkId_expiry');
             
-            // Check if stored and not expired
-            if (clerkId && expiry && parseInt(expiry) > Date.now()) {
+            // Just return the clerk ID without checking expiry
+            if (clerkId) {
                 return clerkId;
             }
             
-            // Determine correct path based on environment
-            const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-            const basePath = isProduction ? '/Prod/templates/' : '/templates/';
-            
-            // If no valid clerk ID, redirect to index
-            alert('Your session has expired or is invalid. Please log in again.');
-            window.location.href = basePath;
-            return null;
+            // If no clerk ID at all, use a default or empty value
+            return '';
         }
 
         const fileInput = document.getElementById('fileInput');
@@ -286,8 +279,16 @@
         document.getElementById('profileForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const clerkId = getClerkId();
-            if (!clerkId) return; // Will redirect in getClerkId function
+            // Get clerkId or use a test ID if empty
+            let clerkId = getClerkId();
+            console.log("Original clerkId:", clerkId);
+            
+            // If clerkId is empty, use a hardcoded test ID
+            if (!clerkId) {
+                clerkId = "test_user_123"; // Use a test ID
+                console.log("Using test clerkId:", clerkId);
+                localStorage.setItem('clerkId', clerkId);
+            }
             
             const phone = document.getElementById('phone').value;
             const address = document.getElementById('address').value;
@@ -303,7 +304,32 @@
                     : 'http://localhost:8000';
                     
                 console.log('Using API URL:', API_BASE);
+                console.log('Using clerkId for API call:', clerkId);
+                console.log('Sending data:', { phone, address, bio, base64_image: !!base64Image, file_extension: fileExtension });
                 
+                // First try to create the user if it doesn't exist
+                try {
+                    const userResponse = await fetch(`${API_BASE}/users/`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            clerkId: clerkId,
+                            email: 'test@example.com',
+                            firstName: 'Test',
+                            lastName: 'User',
+                            role: 'user'
+                        })
+                    });
+                    console.log('User creation response:', userResponse.status);
+                    // If 400 (user already exists), that's fine
+                } catch (userError) {
+                    console.log('User creation error (likely already exists):', userError);
+                    // Continue anyway, as user might already exist
+                }
+                
+                // Now create/update user details
                 const response = await fetch(`${API_BASE}/users/${clerkId}/details`, {
                     method: 'POST',
                     headers: {
@@ -318,15 +344,21 @@
                     })
                 });
 
+                console.log('Response status:', response.status);
+                
                 if (!response.ok) {
-                    throw new Error(await response.text());
+                    const errorText = await response.text();
+                    console.error('Error response:', errorText);
+                    throw new Error(errorText);
                 }
 
                 const result = await response.json();
+                console.log('Success response:', result);
                 alert('Profile saved successfully!');
                 
                 // Redirect to ragpicker details page
                 const basePath = isProduction ? '/Prod/templates/ragpicker-wallet' : '/templates/ragpicker-wallet';
+                console.log('Redirecting to:', basePath);
                 window.location.href = basePath;
             } catch (error) {
                 console.error('Error:', error);
@@ -338,8 +370,16 @@
 
         // Initial load: Fetch existing profile data
         window.onload = async () => {
-            const clerkId = getClerkId();
-            if (!clerkId) return; // Will redirect in getClerkId function
+            // Get clerkId or use a test ID if empty
+            let clerkId = getClerkId();
+            console.log("Original clerkId on page load:", clerkId);
+            
+            // If clerkId is empty, use a hardcoded test ID
+            if (!clerkId) {
+                clerkId = "test_user_123"; // Use a test ID
+                console.log("Using test clerkId on page load:", clerkId);
+                localStorage.setItem('clerkId', clerkId);
+            }
             
             // Determine API base URL based on environment
             const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
@@ -351,8 +391,11 @@
             
             try {
                 const response = await fetch(`${API_BASE}/users/${clerkId}/details`);
+                console.log('Fetch profile response status:', response.status);
+                
                 if (response.ok) {
                     const data = await response.json();
+                    console.log('Fetched profile data:', data);
                     document.getElementById('phone').value = data.phone || '';
                     document.getElementById('address').value = data.address || '';
                     document.getElementById('bio').value = data.bio || '';

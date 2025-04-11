@@ -13,6 +13,7 @@ import logging
 from fastapi import Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -394,6 +395,33 @@ async def review_application(
     db.add(application)
     await db.commit()
     
+    # Send SMS notification based on application status
+    try:
+        user_result = await db.execute(
+            select(User)
+            .where(User.clerkId == application.clerk_id)
+        )
+        user = user_result.scalar_one_or_none()
+        applicant_name = f"{user.firstName} {user.lastName}" if user else "Applicant"
+        
+        if status == "ACCEPTED":
+            notification_message = f"Congratulations {applicant_name}! Your application to become a ragpicker has been approved. You can now start accepting waste collection requests."
+        elif status == "REJECTED":
+            notification_message = f"Dear {applicant_name}, we regret to inform you that your application to become a ragpicker has been rejected. Please contact support for more information."
+        else:
+            notification_message = f"Your application status has been updated to: {status}"
+        
+        logger.info(f"Sending notification for application {application_id}: {notification_message}")
+        sms_sent = await twilio_service.send_sms(notification_message)
+        
+        if sms_sent:
+            logger.info(f"SMS notification sent successfully for application {application_id}")
+        else:
+            logger.warning(f"Failed to send SMS notification for application {application_id}")
+    except Exception as e:
+        # Don't fail the endpoint if SMS sending fails
+        logger.error(f"Error sending SMS notification: {str(e)}")
+    
     logger.info(f"Application {application_id} status updated to {status}")
     return {"message": f"Application {status} successfully"}
 
@@ -456,19 +484,37 @@ async def verify_clerk_user_exists(clerk_id: str):
         detail=error_msg
     )
 
+# Add this Pydantic model for RFID data
+class RFIDData(BaseModel):
+    rfid: str
+
 @router.post("/ragpickers/{application_id}/rfid", status_code=status.HTTP_200_OK)
 async def assign_rfid(
     application_id: int,
-    rfid: dict,
+    rfid_data: RFIDData,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Assign RFID to a ragpicker
+    
+    Expected payload format:
+    {"rfid": "rfid_string_value"}
     """
     try:
-        logger.info(f"Assigning RFID for application {application_id}: {rfid}")
+        # Log the received RFID value
+        logger.info(f"RFID assignment request received for application {application_id}")
+        logger.info(f"RFID value received: {rfid_data.rfid}")
         
-        # Get the application to find the associated clerkId
+        # Use the string from the model
+        rfid_value = rfid_data.rfid
+        
+        # Validate RFID value is not empty
+        if not rfid_value or not rfid_value.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="RFID value is required and cannot be empty"
+            )
+            
         # Get the application to find the associated clerkId
         stmt = select(RagpickerApplication).where(RagpickerApplication.id == application_id)
         result = await db.execute(stmt)
@@ -490,22 +536,39 @@ async def assign_rfid(
         ragpicker_details = result.scalar_one_or_none()
         
         if not ragpicker_details:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Ragpicker details for clerk_id {clerk_id} not found"
-                detail=f"Ragpicker details for clerk_id {clerk_id} not found"
+            logger.warning(f"Ragpicker details not found for clerk_id {clerk_id}, creating new record")
+            # Create a new record if it doesn't exist
+            ragpicker_details = RagpickerDetails(
+                clerkId=clerk_id,
+                RFID=rfid_value
             )
-        
-        # Update the ragpicker details RFID
-        ragpicker_details.rfid = rfid.get("rfid")
+            db.add(ragpicker_details)
+        else:
+            # Update existing record
+            logger.info(f"Updating RFID for existing ragpicker details, clerk_id: {clerk_id}")
+            logger.info(f"Old RFID: {ragpicker_details.RFID}, New RFID: {rfid_value}")
+            ragpicker_details.RFID = rfid_value
         
         await db.commit()
         
-        return {"message": "RFID assigned successfully", "rfid": rfid.get("rfid")}
+        # Double-check the value was actually saved by refreshing from DB
+        await db.refresh(ragpicker_details)
+        saved_rfid = ragpicker_details.RFID
+        logger.info(f"RFID saved successfully: {saved_rfid}")
+        
+        return {
+            "message": "RFID assigned successfully",
+            "rfid": saved_rfid,
+            "clerk_id": clerk_id
+        }
     
+    except HTTPException as http_exc:
+        await db.rollback()
+        logger.error(f"HTTP error assigning RFID: {http_exc.detail}")
+        raise
     except Exception as e:
         await db.rollback()
-        logger.error(f"Error assigning RFID: {str(e)}")
+        logger.error(f"Error assigning RFID: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to assign RFID: {str(e)}"
