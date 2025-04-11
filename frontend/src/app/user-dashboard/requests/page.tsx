@@ -1,111 +1,141 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
+import { ethers } from "ethers"
 import { CheckCircle, Clock, Search, Trash2, XCircle } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getCustomerRequests } from "@/lib/api"
+import { getCustomerRequests, updateRequestStatus } from "@/lib/api"
 import type { Request } from "@/lib/api"
 import type { JSX } from "react/jsx-runtime"
-import Link from "next/link"
+import { toast } from "@/hooks/use-toast" // <-- Make sure you have this hook imported
+
+// Minimal ABI for calling confirmCompletion() on RagJob
+const RagJobABI = [
+  {
+    "inputs": [],
+    "name": "confirmCompletion",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+]
 
 export default function UserRequests() {
-  // Mock user data - in a real app, this would come from authentication
-  const mockUser = {
-    firstName: "John",
-    lastName: "Doe",
-    clerkId: "user_123456",
-  }
+  // Hardcode the clerkId as a string (customer user)
+  const clerkId = "string"
 
   const [requests, setRequests] = useState<Request[]>([])
   const [filteredRequests, setFilteredRequests] = useState<Request[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState("all")
+  const [isMarking, setIsMarking] = useState<number | null>(null) // store request ID being completed
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // In a real app, you would use the actual user's clerkId
-        const requestsData = await getCustomerRequests(mockUser.clerkId)
+        const requestsData = await getCustomerRequests(clerkId)
         setRequests(requestsData)
         setFilteredRequests(requestsData)
       } catch (error) {
         console.error("Error fetching requests:", error)
-        // Use mock data for demonstration
-        const mockRequests = [
-          {
-            id: 1,
-            customer_clerkId: mockUser.clerkId,
-            ragpicker_clerkId: "ragpicker_123",
-            status: "PENDING",
-            created_at: new Date().toISOString(),
-            ragpicker_name: "Alex Johnson",
-          },
-          {
-            id: 2,
-            customer_clerkId: mockUser.clerkId,
-            ragpicker_clerkId: "ragpicker_456",
-            status: "COMPLETED",
-            created_at: new Date(Date.now() - 86400000).toISOString(),
-            ragpicker_name: "Sarah Williams",
-          },
-          {
-            id: 3,
-            customer_clerkId: mockUser.clerkId,
-            ragpicker_clerkId: "ragpicker_789",
-            status: "ACCEPTED",
-            created_at: new Date(Date.now() - 43200000).toISOString(),
-            ragpicker_name: "Mike Brown",
-          },
-          {
-            id: 4,
-            customer_clerkId: mockUser.clerkId,
-            ragpicker_clerkId: "ragpicker_101",
-            status: "REJECTED",
-            created_at: new Date(Date.now() - 129600000).toISOString(),
-            ragpicker_name: "Emily Davis",
-          },
-          {
-            id: 5,
-            customer_clerkId: mockUser.clerkId,
-            ragpicker_clerkId: "ragpicker_202",
-            status: "COMPLETED",
-            created_at: new Date(Date.now() - 172800000).toISOString(),
-            ragpicker_name: "James Wilson",
-          },
-        ] as Request[]
-
-        setRequests(mockRequests)
-        setFilteredRequests(mockRequests)
+        setRequests([])
+        setFilteredRequests([])
       } finally {
         setIsLoading(false)
       }
     }
 
     fetchData()
-  }, [])
+  }, [clerkId])
 
   useEffect(() => {
     let result = [...requests]
 
-    // Filter by status
+    // Filter by status (activeTab)
     if (activeTab !== "all") {
-      result = result.filter((request) => request.status.toLowerCase() === activeTab.toLowerCase())
+      result = result.filter((req) => req.status.toLowerCase() === activeTab.toLowerCase())
     }
 
     // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
       result = result.filter(
-        (request) => request.ragpicker_name?.toLowerCase().includes(query) || request.id.toString().includes(query),
+        (req) =>
+          req.ragpicker_name?.toLowerCase().includes(query) ||
+          req.id.toString().includes(query)
       )
     }
 
     setFilteredRequests(result)
   }, [activeTab, searchQuery, requests])
+
+  // Calls confirmCompletion() in the RagJob contract
+  const handleMarkCompleted = async (request: Request) => {
+    if (!request.smart_contract_address) {
+      console.error("No contract address found on this request.")
+      toast({
+        title: "No Contract Address",
+        description: "Cannot mark this request completed without a contract address",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      setIsMarking(request.id)
+
+      if (!window.ethereum) {
+        toast({
+          title: "MetaMask not found",
+          description: "Please install or unlock MetaMask to proceed",
+          variant: "destructive"
+        })
+        return
+      }
+
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+
+      // Instantiate RagJob contract
+      const contract = new ethers.Contract(
+        request.smart_contract_address,
+        RagJobABI,
+        signer
+      )
+
+      // Call confirmCompletion
+      const tx = await contract.confirmCompletion()
+      console.log("confirmCompletion transaction sent:", tx)
+      await tx.wait() // wait for mining
+      console.log("Transaction mined")
+
+      // Optionally update the request status in your backend
+      const updatedReq = await updateRequestStatus(request.id, "COMPLETED")
+
+      // Update local state
+      setRequests((prev) => prev.map((r) => (r.id === request.id ? updatedReq : r)))
+
+      // Show a success toast
+      toast({
+        title: "Payment Released",
+        description: "Payment has been successfully transferred to the ragpicker."
+      })
+    } catch (error: any) {
+      console.error("Error calling confirmCompletion:", error)
+      toast({
+        title: "Error",
+        description: error.reason || error.message || "Failed to confirm completion",
+        variant: "destructive"
+      })
+    } finally {
+      setIsMarking(null)
+    }
+  }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -137,7 +167,9 @@ export default function UserRequests() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">My Requests</h1>
-        <p className="text-muted-foreground">Manage and track your waste collection requests</p>
+        <p className="text-muted-foreground">
+          Manage and track your waste collection requests
+        </p>
       </div>
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -152,7 +184,9 @@ export default function UserRequests() {
           />
         </div>
         <Link href="/user-dashboard/requests/new">
-          <Button className="bg-green-600 hover:bg-green-700">New Request</Button>
+          <Button className="bg-green-600 hover:bg-green-700">
+            New Request
+          </Button>
         </Link>
       </div>
 
@@ -164,12 +198,15 @@ export default function UserRequests() {
           <TabsTrigger value="completed">Completed</TabsTrigger>
           <TabsTrigger value="rejected">Rejected</TabsTrigger>
         </TabsList>
+
         <TabsContent value="all" className="mt-4">
           <RequestsList
             requests={filteredRequests}
             isLoading={isLoading}
             getStatusIcon={getStatusIcon}
             formatDate={formatDate}
+            handleMarkCompleted={handleMarkCompleted}
+            isMarking={isMarking}
           />
         </TabsContent>
         <TabsContent value="pending" className="mt-4">
@@ -178,6 +215,8 @@ export default function UserRequests() {
             isLoading={isLoading}
             getStatusIcon={getStatusIcon}
             formatDate={formatDate}
+            handleMarkCompleted={handleMarkCompleted}
+            isMarking={isMarking}
           />
         </TabsContent>
         <TabsContent value="accepted" className="mt-4">
@@ -186,6 +225,8 @@ export default function UserRequests() {
             isLoading={isLoading}
             getStatusIcon={getStatusIcon}
             formatDate={formatDate}
+            handleMarkCompleted={handleMarkCompleted}
+            isMarking={isMarking}
           />
         </TabsContent>
         <TabsContent value="completed" className="mt-4">
@@ -194,6 +235,8 @@ export default function UserRequests() {
             isLoading={isLoading}
             getStatusIcon={getStatusIcon}
             formatDate={formatDate}
+            handleMarkCompleted={handleMarkCompleted}
+            isMarking={isMarking}
           />
         </TabsContent>
         <TabsContent value="rejected" className="mt-4">
@@ -202,6 +245,8 @@ export default function UserRequests() {
             isLoading={isLoading}
             getStatusIcon={getStatusIcon}
             formatDate={formatDate}
+            handleMarkCompleted={handleMarkCompleted}
+            isMarking={isMarking}
           />
         </TabsContent>
       </Tabs>
@@ -214,9 +259,18 @@ interface RequestsListProps {
   isLoading: boolean
   getStatusIcon: (status: string) => JSX.Element
   formatDate: (dateString: string) => string
+  handleMarkCompleted: (request: Request) => Promise<void>
+  isMarking: number | null
 }
 
-function RequestsList({ requests, isLoading, getStatusIcon, formatDate }: RequestsListProps) {
+function RequestsList({
+  requests,
+  isLoading,
+  getStatusIcon,
+  formatDate,
+  handleMarkCompleted,
+  isMarking
+}: RequestsListProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-60">
@@ -231,7 +285,7 @@ function RequestsList({ requests, isLoading, getStatusIcon, formatDate }: Reques
         <Trash2 className="h-12 w-12 text-gray-300" />
         <h3 className="text-lg font-medium text-gray-900">No requests found</h3>
         <p className="text-sm text-muted-foreground text-center max-w-md">
-          You don't have any waste collection requests matching your filters.
+          You don&apos;t have any waste collection requests matching your filters.
         </p>
       </div>
     )
@@ -250,10 +304,10 @@ function RequestsList({ requests, isLoading, getStatusIcon, formatDate }: Reques
                     request.status === "PENDING"
                       ? "bg-yellow-100 text-yellow-800"
                       : request.status === "ACCEPTED"
-                        ? "bg-blue-100 text-blue-800"
-                        : request.status === "COMPLETED"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-red-100 text-red-800"
+                      ? "bg-blue-100 text-blue-800"
+                      : request.status === "COMPLETED"
+                      ? "bg-green-100 text-green-800"
+                      : "bg-red-100 text-red-800"
                   }`}
                 >
                   {request.status}
@@ -263,14 +317,19 @@ function RequestsList({ requests, isLoading, getStatusIcon, formatDate }: Reques
                 View Details
               </Button>
             </div>
-            <CardDescription>Created on {formatDate(request.created_at)}</CardDescription>
+            <CardDescription>
+              Created on {formatDate(request.created_at)}
+            </CardDescription>
           </CardHeader>
+
           <CardContent>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 {getStatusIcon(request.status)}
                 <div>
-                  <p className="text-sm font-medium">Ragpicker: {request.ragpicker_name || "Unknown"}</p>
+                  <p className="text-sm font-medium">
+                    Ragpicker: {request.ragpicker_name || "Unknown"}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {request.status === "PENDING" && "Waiting for ragpicker to accept"}
                     {request.status === "ACCEPTED" && "Ragpicker has accepted your request"}
@@ -279,7 +338,20 @@ function RequestsList({ requests, isLoading, getStatusIcon, formatDate }: Reques
                   </p>
                 </div>
               </div>
+
               <div className="flex gap-2">
+                {request.status === "ACCEPTED" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-green-500 border-green-200 hover:bg-green-50"
+                    onClick={() => handleMarkCompleted(request)}
+                    disabled={isMarking === request.id}
+                  >
+                    {isMarking === request.id ? "Marking..." : "Mark as Completed"}
+                  </Button>
+                )}
+
                 {request.status === "COMPLETED" && (
                   <Button size="sm" variant="outline" asChild>
                     <Link
@@ -289,8 +361,13 @@ function RequestsList({ requests, isLoading, getStatusIcon, formatDate }: Reques
                     </Link>
                   </Button>
                 )}
+
                 {request.status === "PENDING" && (
-                  <Button size="sm" variant="outline" className="text-red-500 border-red-200 hover:bg-red-50">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-red-500 border-red-200 hover:bg-red-50"
+                  >
                     Cancel
                   </Button>
                 )}

@@ -6,15 +6,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getRagpickerRequests } from "@/lib/api"
+import {
+  getRagpickerRequests,
+  updateRequestStatus,
+} from "@/lib/api"
 import type { Request } from "@/lib/api"
 
 export default function RagpickerRequests() {
-  // Mock user data - in a real app, this would come from authentication
-  const mockUser = {
+  // Hardcoded ragpicker user info
+  const ragpickerUser = {
     firstName: "Alex",
     lastName: "Johnson",
-    clerkId: "ragpicker_123456",
+    clerkId: "string2", // Hardcoded clerk ID
   }
 
   const [requests, setRequests] = useState<Request[]>([])
@@ -26,94 +29,54 @@ export default function RagpickerRequests() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // In a real app, you would use the actual ragpicker's clerkId
-        const requestsData = await getRagpickerRequests(mockUser.clerkId)
+        const requestsData = await getRagpickerRequests(ragpickerUser.clerkId)
         setRequests(requestsData)
         setFilteredRequests(requestsData)
       } catch (error) {
         console.error("Error fetching requests:", error)
-        // Use mock data for demonstration
-        const mockRequests = [
-          {
-            id: 1,
-            customer_clerkId: "customer_123",
-            ragpicker_clerkId: mockUser.clerkId,
-            status: "PENDING",
-            created_at: new Date().toISOString(),
-            customer_name: "John Doe",
-          },
-          {
-            id: 2,
-            customer_clerkId: "customer_456",
-            ragpicker_clerkId: mockUser.clerkId,
-            status: "COMPLETED",
-            created_at: new Date(Date.now() - 86400000).toISOString(),
-            customer_name: "Jane Smith",
-          },
-          {
-            id: 3,
-            customer_clerkId: "customer_789",
-            ragpicker_clerkId: mockUser.clerkId,
-            status: "ACCEPTED",
-            created_at: new Date(Date.now() - 43200000).toISOString(),
-            customer_name: "Robert Brown",
-          },
-          {
-            id: 4,
-            customer_clerkId: "customer_101",
-            ragpicker_clerkId: mockUser.clerkId,
-            status: "REJECTED",
-            created_at: new Date(Date.now() - 129600000).toISOString(),
-            customer_name: "Emily Davis",
-          },
-          {
-            id: 5,
-            customer_clerkId: "customer_202",
-            ragpicker_clerkId: mockUser.clerkId,
-            status: "PENDING",
-            created_at: new Date(Date.now() - 21600000).toISOString(),
-            customer_name: "James Wilson",
-          },
-        ] as Request[]
-
-        setRequests(mockRequests)
-        setFilteredRequests(mockRequests)
+        setRequests([])
+        setFilteredRequests([])
       } finally {
         setIsLoading(false)
       }
     }
 
     fetchData()
-  }, [])
+  }, [ragpickerUser.clerkId])
 
   useEffect(() => {
     let result = [...requests]
 
-    // Filter by status
+    // Filter by status (tab)
     if (activeTab !== "all") {
-      result = result.filter((request) => request.status.toLowerCase() === activeTab.toLowerCase())
+      result = result.filter(
+        (request) => request.status.toLowerCase() === activeTab.toLowerCase()
+      )
     }
 
     // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
       result = result.filter(
-        (request) => request.customer_name?.toLowerCase().includes(query) || request.id.toString().includes(query),
+        (request) =>
+          request.customer_name?.toLowerCase().includes(query) ||
+          request.id.toString().includes(query)
       )
     }
 
     setFilteredRequests(result)
   }, [activeTab, searchQuery, requests])
 
-  const handleUpdateStatus = async (requestId: number, status: "ACCEPTED" | "REJECTED" | "COMPLETED") => {
+  const handleUpdateStatus = async (
+    requestId: number,
+    status: "ACCEPTED" | "REJECTED"
+  ) => {
     try {
-      // In a real app, this would call the API
-      // await updateRequestStatus(requestId, status)
-
-      // For demo, update the local state
-      const updatedRequests = requests.map((req) => (req.id === requestId ? { ...req, status } : req))
-
-      setRequests(updatedRequests)
+      const updated = await updateRequestStatus(requestId, status)
+      // Replace the old request with the updated one in local state
+      setRequests((prev) =>
+        prev.map((req) => (req.id === requestId ? updated : req))
+      )
     } catch (error) {
       console.error(`Error updating request status to ${status}:`, error)
     }
@@ -149,7 +112,9 @@ export default function RagpickerRequests() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Pickup Requests</h1>
-        <p className="text-muted-foreground">Manage and track waste collection requests from customers</p>
+        <p className="text-muted-foreground">
+          Manage and track waste collection requests from customers
+        </p>
       </div>
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -173,6 +138,7 @@ export default function RagpickerRequests() {
           <TabsTrigger value="completed">Completed</TabsTrigger>
           <TabsTrigger value="rejected">Rejected</TabsTrigger>
         </TabsList>
+
         <TabsContent value="all" className="mt-4">
           <RequestsList
             requests={filteredRequests}
@@ -228,10 +194,16 @@ interface RequestsListProps {
   isLoading: boolean
   getStatusIcon: (status: string) => JSX.Element
   formatDate: (dateString: string) => string
-  onUpdateStatus: (requestId: number, status: "ACCEPTED" | "REJECTED" | "COMPLETED") => void
+  onUpdateStatus: (requestId: number, status: "ACCEPTED" | "REJECTED") => void
 }
 
-function RequestsList({ requests, isLoading, getStatusIcon, formatDate, onUpdateStatus }: RequestsListProps) {
+function RequestsList({
+  requests,
+  isLoading,
+  getStatusIcon,
+  formatDate,
+  onUpdateStatus
+}: RequestsListProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-60">
@@ -246,7 +218,7 @@ function RequestsList({ requests, isLoading, getStatusIcon, formatDate, onUpdate
         <Trash2 className="h-12 w-12 text-gray-300" />
         <h3 className="text-lg font-medium text-gray-900">No requests found</h3>
         <p className="text-sm text-muted-foreground text-center max-w-md">
-          You don't have any waste collection requests matching your filters.
+          You don&apos;t have any waste collection requests matching your filters.
         </p>
       </div>
     )
@@ -265,10 +237,10 @@ function RequestsList({ requests, isLoading, getStatusIcon, formatDate, onUpdate
                     request.status === "PENDING"
                       ? "bg-yellow-100 text-yellow-800"
                       : request.status === "ACCEPTED"
-                        ? "bg-blue-100 text-blue-800"
-                        : request.status === "COMPLETED"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-red-100 text-red-800"
+                      ? "bg-blue-100 text-blue-800"
+                      : request.status === "COMPLETED"
+                      ? "bg-green-100 text-green-800"
+                      : "bg-red-100 text-red-800"
                   }`}
                 >
                   {request.status}
@@ -285,12 +257,14 @@ function RequestsList({ requests, isLoading, getStatusIcon, formatDate, onUpdate
               <div className="flex items-center gap-4">
                 {getStatusIcon(request.status)}
                 <div>
-                  <p className="text-sm font-medium">Customer: {request.customer_name || "Unknown"}</p>
+                  <p className="text-sm font-medium">
+                    Customer: {request.customer_name || "Unknown"}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {request.status === "PENDING" && "Customer is waiting for your response"}
-                    {request.status === "ACCEPTED" && "You've accepted this request"}
+                    {request.status === "ACCEPTED" && "You have accepted this request"}
                     {request.status === "COMPLETED" && "Waste collection completed"}
-                    {request.status === "REJECTED" && "You've declined this request"}
+                    {request.status === "REJECTED" && "You have declined this request"}
                   </p>
                 </div>
               </div>
@@ -313,15 +287,6 @@ function RequestsList({ requests, isLoading, getStatusIcon, formatDate, onUpdate
                       Decline
                     </Button>
                   </>
-                )}
-                {request.status === "ACCEPTED" && (
-                  <Button
-                    size="sm"
-                    className="bg-green-600 hover:bg-green-700"
-                    onClick={() => onUpdateStatus(request.id, "COMPLETED")}
-                  >
-                    Mark as Completed
-                  </Button>
                 )}
               </div>
             </div>
