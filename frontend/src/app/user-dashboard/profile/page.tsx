@@ -16,7 +16,7 @@ import { getUser, getUserDetails, getCustomerDetails, updateUser, updateUserDeta
 import { toast } from "@/hooks/use-toast"
 
 // Set your clerkId
-const clerkId = "string"
+const clerkId = "user_2vZXlUiRU8byiwYo9QPJOzmxHx4"
 
 const userFormSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),

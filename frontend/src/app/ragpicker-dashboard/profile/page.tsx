@@ -27,7 +27,7 @@ import { toast } from "@/hooks/use-toast"
 const mockUser = {
   firstName: "Alex",
   lastName: "Johnson",
-  clerkId: "ragpicker_123456",
+  clerkId: "user_2vXyaXunjfYEnioyFnZFvc4q8ah",
   email: "alex.johnson@example.com",
   role: "ragpicker",
 }
