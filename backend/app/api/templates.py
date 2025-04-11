@@ -12,7 +12,7 @@ templates = Jinja2Templates(directory=templates_dir)
 
 router = APIRouter(tags=["templates"])
 
-@router.get("/user-profile", response_class=HTMLResponse)
+@router.get("/user-details", response_class=HTMLResponse)
 async def user_profile_page(request: Request):
     """
     Serve the user profile setup page
@@ -20,7 +20,7 @@ async def user_profile_page(request: Request):
     logger.info("Serving user profile setup page")
     return templates.TemplateResponse("user_details.html", {"request": request})
 
-@router.get("/ragpicker-wallet", response_class=HTMLResponse)
+@router.get("/ragpicker-details", response_class=HTMLResponse)
 async def ragpicker_wallet_page(request: Request):
     """
     Serve the ragpicker wallet setup page
