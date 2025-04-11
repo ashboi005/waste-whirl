@@ -130,6 +130,9 @@ export default function UserRequests() {
         title: "Payment Released",
         description: "Payment has been successfully transferred to the ragpicker."
       })
+      
+      // Redirect to the review page
+      window.location.href = `/user-dashboard/reviews/new?ragpickerId=${request.ragpicker_clerkId}&requestId=${request.id}`
     } catch (error: any) {
       console.error("Error calling confirmCompletion:", error)
       toast({

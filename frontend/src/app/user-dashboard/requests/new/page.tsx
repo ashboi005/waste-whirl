@@ -6,7 +6,8 @@ import {
   getRagpickers,
   getRagpickerDetails,
   createRequest,
-  updateRequestSmartContract
+  updateRequestSmartContract,
+  getCustomerRequests
 } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "@/hooks/use-toast"
 import { Skeleton } from "@/components/ui/skeleton"
 import Link from "next/link"
-import { CheckCircle2, Loader2, ExternalLink } from "lucide-react"
+import { CheckCircle2, Loader2, ExternalLink, AlertCircle } from "lucide-react"
 
 const JobFactoryABI = [
   {
@@ -54,29 +55,56 @@ export default function NewRequestPage() {
   const [createdRequest, setCreatedRequest] = useState<any>(null)
   const [contractAddress, setContractAddress] = useState("")
   const [backendUpdated, setBackendUpdated] = useState(false)
+  const [hasPendingRequest, setHasPendingRequest] = useState(false)
+  const [pendingRequestsLoading, setPendingRequestsLoading] = useState(true)
 
   useEffect(() => {
-    const loadRagpickers = async () => {
+    const loadData = async () => {
       try {
+        setPendingRequestsLoading(true)
+        setLoading(true)
+        
+        // First check if user has any pending requests
+        console.log("Checking for pending requests...")
+        const requests = await getCustomerRequests(TEST_USER_ID)
+        const pendingRequests = requests.filter(req => 
+          req.status === "PENDING" || req.status === "ACCEPTED"
+        )
+        
+        setHasPendingRequest(pendingRequests.length > 0)
+        console.log("Pending requests:", pendingRequests)
+        
+        // Then load ragpickers
         console.log("Fetching ragpickers...")
-        const data = await getRagpickers()
-        console.log("RAGPICKERS =>", data)
-        setRagpickers(data)
+        const ragpickersData = await getRagpickers()
+        console.log("RAGPICKERS =>", ragpickersData)
+        setRagpickers(ragpickersData)
       } catch (error) {
-        console.error("Error fetching ragpickers =>", error)
+        console.error("Error loading data =>", error)
         toast({
           title: "Error",
-          description: "Failed to load ragpickers",
+          description: "Failed to load data",
           variant: "destructive",
         })
       } finally {
+        setPendingRequestsLoading(false)
         setLoading(false)
       }
     }
-    loadRagpickers()
+    
+    loadData()
   }, [])
 
   const handleSubmitRequest = async () => {
+    if (hasPendingRequest) {
+      toast({
+        title: "Active Request Exists",
+        description: "You already have an active request. Please wait until it's completed.",
+        variant: "destructive"
+      })
+      return
+    }
+    
     if (!selectedRagpicker) {
       toast({
         title: "No Ragpicker Selected",
@@ -103,7 +131,7 @@ export default function NewRequestPage() {
         description: "Your request has been initialized",
       })
 
-      // 2. Then fetch that ragpicker’s wallet address
+      // 2. Then fetch that ragpicker's wallet address
       const ragpickerDetails = await getRagpickerDetails(selectedRagpicker.clerkId)
       console.log("ragpickerDetails =>", ragpickerDetails)
 
@@ -187,62 +215,88 @@ export default function NewRequestPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* STEP 1: SELECT RAGPICKER */}
-          {step === "select" && (
-            <div className="space-y-6">
-              <h3 className="text-lg font-medium text-gray-700">
-                Select Ragpicker
-              </h3>
-
-              {loading ? (
-                <div className="space-y-2">
-                  {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-12 w-full" />
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {ragpickers.map((rp) => (
-                    <label
-                      key={rp.clerkId}
-                      className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer"
-                    >
-                      <input
-                        type="radio"
-                        name="ragpicker"
-                        value={rp.clerkId}
-                        checked={selectedRagpicker?.clerkId === rp.clerkId}
-                        onChange={() => setSelectedRagpicker(rp)}
-                        className="form-radio h-5 w-5 text-blue-600"
-                      />
-                      <div>
-                        <p className="font-medium text-gray-800">
-                          {rp.firstName} {rp.lastName}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          Rating: {rp.average_rating}
-                        </p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              )}
-
-              <Button
-                onClick={handleSubmitRequest}
-                className="w-full bg-blue-600 hover:bg-blue-700"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating Request...
-                  </>
-                ) : (
-                  "Create Request"
-                )}
-              </Button>
+          {pendingRequestsLoading ? (
+            <div className="space-y-4">
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-12 w-full" />
             </div>
+          ) : hasPendingRequest ? (
+            <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200 space-y-4">
+              <div className="flex items-center gap-2 text-yellow-700">
+                <AlertCircle className="h-5 w-5" />
+                <p className="font-medium">You have an active request</p>
+              </div>
+              <p className="text-sm text-yellow-600">
+                You already have an active waste collection request. Please wait 
+                until your current request is completed before creating a new one.
+              </p>
+              <Link href="/user-dashboard/requests">
+                <Button 
+                  variant="outline" 
+                  className="w-full border-yellow-300 text-yellow-700 hover:bg-yellow-100"
+                >
+                  View My Requests
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            /* STEP 1: SELECT RAGPICKER */
+            step === "select" && (
+              <div className="space-y-6">
+                <h3 className="text-lg font-medium text-gray-700">
+                  Select Ragpicker
+                </h3>
+
+                {loading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-12 w-full" />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {ragpickers.map((rp) => (
+                      <label
+                        key={rp.clerkId}
+                        className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer"
+                      >
+                        <input
+                          type="radio"
+                          name="ragpicker"
+                          value={rp.clerkId}
+                          checked={selectedRagpicker?.clerkId === rp.clerkId}
+                          onChange={() => setSelectedRagpicker(rp)}
+                          className="form-radio h-5 w-5 text-blue-600"
+                        />
+                        <div>
+                          <p className="font-medium text-gray-800">
+                            {rp.firstName} {rp.lastName}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            Rating: {rp.average_rating}
+                          </p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                <Button
+                  onClick={handleSubmitRequest}
+                  className="w-full bg-blue-600 hover:bg-blue-700"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating Request...
+                    </>
+                  ) : (
+                    "Create Request"
+                  )}
+                </Button>
+              </div>
+            )
           )}
 
           {/* STEP 2: CREATE CONTRACT */}
