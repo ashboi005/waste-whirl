@@ -99,7 +99,7 @@ if ENVIRONMENT == "development":
 
 # Include API routers
 app.include_router(api_router)
-app.include_router(admin_router)
+app.include_router(admin_router, prefix="/admin")
 app.include_router(sensor_router, prefix="/sensors")
 app.include_router(templates_router, prefix="/templates")
 

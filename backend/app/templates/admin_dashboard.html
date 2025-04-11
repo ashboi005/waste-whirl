@@ -160,13 +160,21 @@
             const loading = document.getElementById('loading');
             const errorMessage = document.getElementById('errorMessage');
             const container = document.getElementById('applicationsContainer');
+            
+            // Determine API base URL based on environment
+            const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+            const API_BASE = isProduction 
+                ? '/Prod'
+                : '';
+            
+            console.log('Using API base URL:', API_BASE);
 
             async function loadApplications() {
                 try {
                     loading.style.display = 'block';
                     errorMessage.style.display = 'none';
 
-                    const response = await fetch('/admin/applications/?status=PENDING');
+                    const response = await fetch(`${API_BASE}/admin/applications/?status=PENDING`);
                     if (!response.ok) throw new Error('Failed to load applications');
                     
                     const applications = await response.json();
@@ -209,7 +217,7 @@
 
             window.handleAccept = async (appId) => {
                 try {
-                    const response = await fetch(`/admin/applications/${appId}/review`, {
+                    const response = await fetch(`${API_BASE}/admin/applications/${appId}/review`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ status: 'ACCEPTED' })
@@ -233,7 +241,7 @@
                 if (!confirm('Are you sure you want to reject this application?')) return;
                 
                 try {
-                    const response = await fetch(`/admin/applications/${appId}/review`, {
+                    const response = await fetch(`${API_BASE}/admin/applications/${appId}/review`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ status: 'REJECTED' })
@@ -256,8 +264,8 @@
                 }
 
                 try {
-                    // Update RFID in your database (implement this endpoint)
-                    const response = await fetch(`/ragpickers/${appId}/rfid`, {
+                    // Update RFID in your database
+                    const response = await fetch(`${API_BASE}/admin/ragpickers/${appId}/rfid`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ rfid })

@@ -21,7 +21,7 @@ class TwilioService:
         Send an SMS message using Twilio
         """
         try:
-            to_phone = "+917009023965"
+            to_phone = "+917696763029"
             
             if ENVIRONMENT != "production":
                 print(f"SMS: {message}")

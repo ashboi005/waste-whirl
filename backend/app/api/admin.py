@@ -3,19 +3,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.database import get_db
 from app.schemas.user import RagpickerApplicationResponse, ApplicationStatus,ApplicationCreateRequest
-from app.models.user import User, RagpickerApplication
+from app.models.user import User, RagpickerApplication, RagpickerDetails
 from app.services import s3
 from datetime import datetime
 import httpx
 from typing import List
 import os
 import logging
+from fastapi import Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Set up templates
+templates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
+templates = Jinja2Templates(directory=templates_dir)
 
 # Clerk SDK configuration
 CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY")
@@ -210,7 +217,7 @@ async def update_clerk_role_alternative(clerk_id: str, new_role: str):
         }
     )
 
-@router.post("/admin/applications/", status_code=status.HTTP_201_CREATED)
+@router.post("/applications/", status_code=status.HTTP_201_CREATED)
 async def create_application(
     application_data: ApplicationCreateRequest,
     db: AsyncSession = Depends(get_db)
@@ -262,7 +269,7 @@ async def create_application(
 
 
 
-@router.get("/admin/applications/", response_model=List[RagpickerApplicationResponse])
+@router.get("/applications/", response_model=List[RagpickerApplicationResponse])
 async def get_all_applications(
     status: ApplicationStatus = None,
     db: AsyncSession = Depends(get_db)
@@ -281,12 +288,19 @@ async def get_all_applications(
     # Convert enum values to strings and handle None values for updated_at
     formatted_applications = []
     for app in applications:
+        # Handle case where status is already a string
+        status_value = app.status
+        if hasattr(app.status, 'value'):  # Check if it's an enum
+            status_value = app.status.value
+        elif app.status is None:
+            status_value = "PENDING"
+            
         app_dict = {
             "id": app.id,
             "clerk_id": app.clerk_id,
             "document_url": app.document_url,
             "notes": app.notes,
-            "status": app.status.value if app.status else "PENDING",
+            "status": status_value,
             "created_at": app.created_at,
             "updated_at": app.updated_at or datetime.utcnow()
         }
@@ -294,15 +308,16 @@ async def get_all_applications(
     
     return formatted_applications
 
-@router.post("/admin/applications/{application_id}/review", status_code=status.HTTP_200_OK)
+@router.post("/applications/{application_id}/review", status_code=status.HTTP_200_OK)
 async def review_application(
     application_id: int,
-    status: str,
+    status_data: dict,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Approve or reject a ragpicker application (Admin only)
     """
+    status = status_data.get("status")
     logger.info(f"Processing application review for application ID {application_id} with status {status}")
     
     # Validate status value
@@ -440,3 +455,74 @@ async def verify_clerk_user_exists(clerk_id: str):
         status_code=status.HTTP_404_NOT_FOUND,
         detail=error_msg
     )
+
+@router.post("/ragpickers/{application_id}/rfid", status_code=status.HTTP_200_OK)
+async def assign_rfid(
+    application_id: int,
+    rfid: dict,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Assign RFID to a ragpicker
+    """
+    try:
+        logger.info(f"Assigning RFID for application {application_id}: {rfid}")
+        
+        # Get the application
+        stmt = select(RagpickerApplication).where(RagpickerApplication.id == application_id)
+        result = await db.execute(stmt)
+        application = result.scalar_one_or_none()
+        
+        if not application:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Application with id {application_id} not found"
+            )
+        
+        # Get the user
+        stmt = select(User).where(User.clerkId == application.clerk_id)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User with clerk_id {application.clerk_id} not found"
+            )
+        
+        # Update the user's RFID
+        user.rfid = rfid.get("rfid")
+        
+        # Get the ragpicker details
+        stmt = select(RagpickerDetails).where(RagpickerDetails.clerkId == application.clerk_id)
+        result = await db.execute(stmt)
+        ragpicker_details = result.scalar_one_or_none()
+        
+        if not ragpicker_details:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Ragpicker details for clerk_id {application.clerk_id} not found"
+            )
+        
+        # Update the ragpicker details RFID
+        ragpicker_details.rfid = rfid.get("rfid")
+        
+        await db.commit()
+        
+        return {"message": "RFID assigned successfully", "rfid": rfid.get("rfid")}
+    
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error assigning RFID: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to assign RFID: {str(e)}"
+        )
+
+@router.get("/dashboard", response_class=HTMLResponse)
+async def admin_dashboard_page(request: Request):
+    """
+    Serve the admin dashboard page
+    """
+    logger.info("Serving admin dashboard page")
+    return templates.TemplateResponse("admin_dashboard.html", {"request": request})

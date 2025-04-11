@@ -386,19 +386,43 @@
                         throw new Error(responseData.detail || 'Application submission failed');
                     }
                     
-                    showSuccess('Application submitted successfully!');
+                    showSuccess('Application submitted successfully! You will be notified when your application is accepted.');
                     console.log('Success response:', responseData);
                     
-                    setTimeout(function() {
-                        // Determine correct path based on environment
-                        const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-                        // Use absolute URL to avoid path resolution issues
-                        const basePath = isProduction 
-                            ? `${window.location.origin}/Prod/templates/thank-you` 
-                            : `${window.location.origin}/templates/thank-you`;
-                        console.log('Redirecting to:', basePath);
-                        window.location.href = basePath;
-                    }, 2000);
+                    // Add popup message instead of redirecting
+                    const popup = document.createElement('div');
+                    popup.style.position = 'fixed';
+                    popup.style.top = '50%';
+                    popup.style.left = '50%';
+                    popup.style.transform = 'translate(-50%, -50%)';
+                    popup.style.backgroundColor = 'white';
+                    popup.style.padding = '20px';
+                    popup.style.borderRadius = '8px';
+                    popup.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)';
+                    popup.style.zIndex = '1000';
+                    popup.style.maxWidth = '90%';
+                    popup.style.width = '400px';
+                    popup.style.textAlign = 'center';
+                    
+                    popup.innerHTML = `
+                        <h3 style="color: var(--primary); margin-top: 0;">Application Submitted!</h3>
+                        <p>Thank you for your application. We will review it shortly.</p>
+                        <p><strong>You will receive a message when your application is accepted.</strong></p>
+                        <button id="closePopup" style="background-color: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-top: 15px;">Close</button>
+                    `;
+                    
+                    document.body.appendChild(popup);
+                    
+                    document.getElementById('closePopup').addEventListener('click', function() {
+                        popup.remove();
+                        // Reset the form
+                        form.reset();
+                        fileInfo.textContent = 'No file selected';
+                        preview.style.display = 'none';
+                        submitBtn.disabled = true;
+                    });
+                    
+                    // No more redirect
                 } catch (error) {
                     console.error('Error:', error);
                     showError(error.message);
