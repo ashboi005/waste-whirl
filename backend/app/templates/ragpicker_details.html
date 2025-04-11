@@ -152,51 +152,58 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Validate Clerk ID
-            const clerkId = localStorage.getItem('clerkId');
-            const expiry = localStorage.getItem('clerkId_expiry');
-            
-            if (!clerkId || !expiry || Date.now() > parseInt(expiry)) {
-                localStorage.removeItem('clerkId');
-                localStorage.removeItem('clerkId_expiry');
-                window.location.href = '/';
-                return;
-            }
-
-            const form = document.getElementById('walletForm');
-            const walletInput = document.getElementById('wallet_address');
-            const statusMessage = document.getElementById('statusMessage');
-            const loading = document.getElementById('loading');
-            const submitBtn = document.getElementById('submitBtn');
-
-            // Load existing wallet address
-            async function loadWallet() {
-                try {
-                    const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-                    const API_BASE = isProduction 
-                        ? 'https://your-api-domain.com' 
-                        : 'http://localhost:8000';
-                        
-                    const response = await fetch(`${API_BASE}/ragpickers/${clerkId}/details`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        walletInput.value = data.wallet_address || '';
-                    }
-                } catch (error) {
-                    console.error('Error loading wallet:', error);
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Get the stored Clerk user ID
+            function getClerkId() {
+                const clerkId = localStorage.getItem('clerkId');
+                const expiry = localStorage.getItem('clerkId_expiry');
+                
+                // Check if stored and not expired
+                if (clerkId && expiry && parseInt(expiry) > Date.now()) {
+                    return clerkId;
                 }
+                
+                // If no valid clerk ID, redirect to index
+                alert('Your session has expired or is invalid. Please log in again.');
+                window.location.href = '/templates/';
+                return null;
             }
             
-            loadWallet();
-
-            // Form submission
-            form.addEventListener('submit', async function(e) {
+            // Initialize with clerk ID
+            const clerkId = getClerkId();
+            if (!clerkId) return; // Will redirect in getClerkId function
+            
+            // Try to load existing wallet address
+            try {
+                // Determine API base URL based on environment
+                const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+                const API_BASE = isProduction 
+                    ? 'https://ohmsi5xapc.execute-api.ap-south-1.amazonaws.com/Prod'
+                    : 'http://localhost:8000';
+                    
+                console.log('Using API URL for fetch:', API_BASE);
+                
+                const response = await fetch(`${API_BASE}/ragpickers/${clerkId}/details`);
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('wallet_address').value = data.wallet_address || '';
+                }
+            } catch (error) {
+                console.error('Error loading existing wallet:', error);
+            }
+            
+            // Form submission handler
+            document.getElementById('walletForm').addEventListener('submit', async function(e) {
                 e.preventDefault();
                 
-                const walletAddress = walletInput.value.trim();
+                const clerkId = getClerkId();
+                if (!clerkId) return; // Will redirect in getClerkId function
                 
-                // Validate wallet address
+                const walletAddress = document.getElementById('wallet_address').value;
+                const statusMessage = document.getElementById('statusMessage');
+                const loading = document.getElementById('loading');
+                
+                // Validate wallet address format
                 if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
                     statusMessage.textContent = 'Please enter a valid Ethereum wallet address (0x followed by 40 characters)';
                     statusMessage.className = 'status-message error';
@@ -206,13 +213,15 @@
                 
                 loading.style.display = 'block';
                 statusMessage.style.display = 'none';
-                submitBtn.disabled = true;
                 
                 try {
+                    // Determine API base URL based on environment
                     const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
                     const API_BASE = isProduction 
-                        ? 'https://your-api-domain.com' 
+                        ? 'https://ohmsi5xapc.execute-api.ap-south-1.amazonaws.com/Prod'
                         : 'http://localhost:8000';
+                        
+                    console.log('Using API URL for submit:', API_BASE);
                     
                     const response = await fetch(`${API_BASE}/ragpickers/${clerkId}/details`, {
                         method: 'POST',
@@ -229,8 +238,8 @@
                         throw new Error(errorData.detail || 'Failed to save wallet address');
                     }
                     
-                    // Redirect to next page
-                    window.location.href = '/application_submission.html';
+                    statusMessage.textContent = 'Wallet address saved successfully!';
+                    statusMessage.className = 'status-message success';
                 } catch (error) {
                     console.error('Error:', error);
                     statusMessage.textContent = error.message;
@@ -238,7 +247,6 @@
                 } finally {
                     loading.style.display = 'none';
                     statusMessage.style.display = 'block';
-                    submitBtn.disabled = false;
                 }
             });
         });

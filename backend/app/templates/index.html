@@ -70,13 +70,13 @@
             const urlParams = new URLSearchParams(window.location.search);
             const clerkId = urlParams.get('clerk_id');
             
-            if (clerkId && clerkId.length > 10) { // Basic validation
+            if (clerkId && clerkId.length > 4) { // Basic validation
                 // Store with 1-hour expiration
                 localStorage.setItem('clerkId', clerkId);
                 localStorage.setItem('clerkId_expiry', Date.now() + 3600000);
                 
                 // Redirect to user details
-                window.location.href = '/user_details.html';
+                window.location.href = '/templates/user-details';
             } else {
                 document.getElementById('loadingState').style.display = 'none';
                 document.getElementById('errorState').style.display = 'block';

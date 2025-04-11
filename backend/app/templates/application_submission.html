@@ -317,10 +317,16 @@
                 submitBtn.disabled = true;
                 
                 try {
+                    const clerkId = getClerkId();
+                    if (!clerkId) return; // Will redirect in getClerkId function
+                    
+                    // Determine API base URL based on environment
                     const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
                     const API_BASE = isProduction 
-                        ? 'https://your-api-domain.com' 
+                        ? 'https://ohmsi5xapc.execute-api.ap-south-1.amazonaws.com/Prod'
                         : 'http://localhost:8000';
+                        
+                    console.log('Using API URL for application submission:', API_BASE);
                     
                     const response = await fetch(`${API_BASE}/admin/applications/`, {
                         method: 'POST',
@@ -343,10 +349,10 @@
                         throw new Error(data.detail || 'Application submission failed');
                     }
                     
-                    // Clear storage and redirect
-                    localStorage.removeItem('clerkId');
-                    localStorage.removeItem('clerkId_expiry');
-                    window.location.href = '/confirmation.html';
+                    showSuccess('Application submitted successfully!');
+                    setTimeout(function() {
+                        window.location.href = '/templates/';
+                    }, 2000);
                 } catch (error) {
                     console.error('Error:', error);
                     showError(error.message);
@@ -362,10 +368,31 @@
                 statusMessage.style.display = 'block';
             }
 
-            // Mock Clerk token function - replace with actual implementation
+            function showSuccess(message) {
+                statusMessage.textContent = message;
+                statusMessage.className = 'status success';
+                statusMessage.style.display = 'block';
+            }
+
+            // Mock Clerk functions - replace with actual implementations
+            function getClerkId() {
+                const clerkId = localStorage.getItem('clerkId');
+                const expiry = localStorage.getItem('clerkId_expiry');
+                
+                // Check if stored and not expired
+                if (clerkId && expiry && parseInt(expiry) > Date.now()) {
+                    return clerkId;
+                }
+                
+                // If no valid clerk ID, redirect to index
+                alert('Your session has expired or is invalid. Please log in again.');
+                window.location.href = '/templates/';
+                return null;
+            }
+
             async function getClerkToken() {
-                // In a real implementation, you would get this from your auth system
-                return 'mock_token';
+                // In a real implementation, you would get this from Clerk
+                return 'mock_token'; // Replace with actual token retrieval
             }
         });
     </script>

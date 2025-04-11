@@ -161,179 +161,124 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Validate Clerk ID
+        // Check if clerk ID is available and valid
+        function getClerkId() {
             const clerkId = localStorage.getItem('clerkId');
             const expiry = localStorage.getItem('clerkId_expiry');
             
-            if (!clerkId || !expiry || Date.now() > parseInt(expiry)) {
-                localStorage.removeItem('clerkId');
-                localStorage.removeItem('clerkId_expiry');
-                window.location.href = '/';
-                return;
+            // Check if stored and not expired
+            if (clerkId && expiry && parseInt(expiry) > Date.now()) {
+                return clerkId;
             }
-
-            const form = document.getElementById('profileForm');
-            const fileInput = document.getElementById('fileInput');
-            const dropArea = document.getElementById('dropArea');
-            const preview = document.getElementById('preview');
-            const fileInfo = document.getElementById('fileInfo');
-            const loading = document.getElementById('loading');
-            const submitBtn = document.getElementById('submitBtn');
             
-            let base64Image = null;
-            let fileExtension = null;
+            // If no valid clerk ID, redirect to index
+            alert('Your session has expired or is invalid. Please log in again.');
+            window.location.href = '/templates/';
+            return null;
+        }
 
-            // File handling
-            fileInput.addEventListener('change', handleFileSelect);
-            dropArea.addEventListener('click', () => fileInput.click());
-            dropArea.addEventListener('dragover', handleDragOver);
-            dropArea.addEventListener('drop', handleDrop);
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        let base64Image = null;
+        let fileExtension = null;
 
-            function handleFileSelect(e) {
-                const file = e.target.files[0];
-                if (file) processFile(file);
-            }
-
-            function handleDragOver(e) {
-                e.preventDefault();
-                dropArea.style.borderColor = '#1a73e8';
-                dropArea.style.backgroundColor = 'rgba(26, 115, 232, 0.05)';
-            }
-
-            function handleDrop(e) {
-                e.preventDefault();
-                dropArea.style.borderColor = '#e0e0e0';
-                dropArea.style.backgroundColor = '';
-                
-                if (e.dataTransfer.files.length) {
-                    processFile(e.dataTransfer.files[0]);
-                }
-            }
-
-            function processFile(file) {
-                const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
-                const maxSize = 5 * 1024 * 1024; // 5MB
-                
-                if (!validTypes.includes(file.type)) {
-                    showError('Please upload a JPG or PNG image');
-                    return;
-                }
-                
-                if (file.size > maxSize) {
-                    showError('File size exceeds 5MB limit');
-                    return;
-                }
-                
-                fileExtension = file.name.split('.').pop().toLowerCase();
-                fileInfo.textContent = `Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`;
-                
+        // Handle file selection
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
                 const reader = new FileReader();
+                fileExtension = file.name.split('.').pop().toLowerCase();
+                
                 reader.onload = function(e) {
                     base64Image = e.target.result.split(',')[1];
                     preview.src = e.target.result;
                     preview.style.display = 'block';
                 };
+                
                 reader.readAsDataURL(file);
             }
-
-            // Form submission
-            form.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                
-                if (!validateForm()) return;
-                
-                loading.style.display = 'block';
-                submitBtn.disabled = true;
-                
-                try {
-                    const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-                    const API_BASE = isProduction 
-                        ? 'https://your-api-domain.com' 
-                        : 'http://localhost:8000';
-                    
-                    const response = await fetch(`${API_BASE}/users/${clerkId}/details`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            phone: document.getElementById('phone').value,
-                            address: document.getElementById('address').value,
-                            bio: document.getElementById('bio').value,
-                            base64_image: base64Image,
-                            file_extension: fileExtension
-                        })
-                    });
-
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.detail || 'Failed to save profile');
-                    }
-
-                    window.location.href = '/ragpicker_details.html';
-                } catch (error) {
-                    console.error('Error:', error);
-                    showError('Failed to save profile: ' + error.message);
-                } finally {
-                    loading.style.display = 'none';
-                    submitBtn.disabled = false;
-                }
-            });
-
-            function validateForm() {
-                let isValid = true;
-                
-                if (!document.getElementById('phone').checkValidity()) {
-                    document.getElementById('phoneError').textContent = 'Please enter a valid 10-digit phone number';
-                    document.getElementById('phoneError').style.display = 'block';
-                    isValid = false;
-                } else {
-                    document.getElementById('phoneError').style.display = 'none';
-                }
-                
-                if (!document.getElementById('address').checkValidity()) {
-                    document.getElementById('addressError').textContent = 'Address must be at least 5 characters';
-                    document.getElementById('addressError').style.display = 'block';
-                    isValid = false;
-                } else {
-                    document.getElementById('addressError').style.display = 'none';
-                }
-                
-                return isValid;
-            }
-
-            function showError(message) {
-                alert(message); // Or use a more sophisticated error display
-            }
-
-            // Load existing profile
-            async function loadProfile() {
-                try {
-                    const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-                    const API_BASE = isProduction 
-                        ? 'https://your-api-domain.com' 
-                        : 'http://localhost:8000';
-                        
-                    const response = await fetch(`${API_BASE}/users/${clerkId}/details`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        document.getElementById('phone').value = data.phone || '';
-                        document.getElementById('address').value = data.address || '';
-                        document.getElementById('bio').value = data.bio || '';
-                        if (data.profile_pic_url) {
-                            preview.src = data.profile_pic_url;
-                            preview.style.display = 'block';
-                            fileInfo.textContent = 'Current profile picture';
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error loading profile:', error);
-                }
-            }
-            
-            loadProfile();
         });
+
+        // Handle form submission
+        document.getElementById('profileForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const clerkId = getClerkId();
+            if (!clerkId) return; // Will redirect in getClerkId function
+            
+            const phone = document.getElementById('phone').value;
+            const address = document.getElementById('address').value;
+            const bio = document.getElementById('bio').value;
+
+            document.getElementById('loading').style.display = 'block';
+
+            try {
+                // Determine API base URL based on environment
+                const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+                const API_BASE = isProduction 
+                    ? 'https://ohmsi5xapc.execute-api.ap-south-1.amazonaws.com/Prod'
+                    : 'http://localhost:8000';
+                    
+                console.log('Using API URL:', API_BASE);
+                
+                const response = await fetch(`${API_BASE}/users/${clerkId}/details`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        phone: phone,
+                        address: address,
+                        bio: bio,
+                        base64_image: base64Image,
+                        file_extension: fileExtension
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                const result = await response.json();
+                alert('Profile saved successfully!');
+                window.location.reload();
+            } catch (error) {
+                console.error('Error:', error);
+                alert(`Error saving profile: ${error.message}`);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        });
+
+        // Initial load: Fetch existing profile data
+        window.onload = async () => {
+            const clerkId = getClerkId();
+            if (!clerkId) return; // Will redirect in getClerkId function
+            
+            // Determine API base URL based on environment
+            const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+            const API_BASE = isProduction 
+                ? 'https://ohmsi5xapc.execute-api.ap-south-1.amazonaws.com/Prod'
+                : 'http://localhost:8000';
+                
+            console.log('Using API URL for profile fetch:', API_BASE);
+            
+            try {
+                const response = await fetch(`${API_BASE}/users/${clerkId}/details`);
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('phone').value = data.phone || '';
+                    document.getElementById('address').value = data.address || '';
+                    document.getElementById('bio').value = data.bio || '';
+                    if (data.profile_pic_url) {
+                        preview.src = data.profile_pic_url;
+                        preview.style.display = 'block';
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching profile:', error);
+            }
+        };
     </script>
 </body>
 </html>
