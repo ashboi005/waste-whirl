@@ -52,22 +52,29 @@ async def create_request(request_data: RequestCreate, db: AsyncSession = Depends
     await db.commit()
     await db.refresh(new_request)
     
-    # Send notification to ragpicker (not throwing error if it fails)
-    await twilio_service.send_notification(
-        notification_type="new_request",
-        customer_name=f"{customer.firstName} {customer.lastName}"
-    )
-    
-    # Get customer and ragpicker names for response
-    customer_name = f"{customer.firstName} {customer.lastName}"
-    ragpicker_name = f"{ragpicker.firstName} {ragpicker.lastName}"
-    
-    # Get customer address
+    # Get customer address for notification
     customer_address = None
     user_details_result = await db.execute(select(UserDetails).where(UserDetails.clerkId == request_data.customer_clerkId))
     user_details = user_details_result.scalars().first()
     if user_details:
         customer_address = user_details.address
+    
+    # Send notification to ragpicker about new request
+    try:
+        logger.info(f"Sending notification to ragpicker about new request from {customer.firstName} {customer.lastName}")
+        await twilio_service.send_notification(
+            notification_type="new_request",
+            customer_name=f"{customer.firstName} {customer.lastName}",
+            customer_address=customer_address or "No address provided",
+            request_id=str(new_request.id)
+        )
+        logger.info("Notification sent successfully")
+    except Exception as e:
+        logger.error(f"Failed to send notification: {str(e)}")
+    
+    # Get customer and ragpicker names for response
+    customer_name = f"{customer.firstName} {customer.lastName}"
+    ragpicker_name = f"{ragpicker.firstName} {ragpicker.lastName}"
     
     return RequestResponse(
         id=new_request.id,
@@ -123,43 +130,55 @@ async def update_request_status(request_id: int, request_update: RequestUpdate, 
         customer_address = user_details.address
     
     # Send notification based on status
-    if request_update.status == "ACCEPTED":
-        await twilio_service.send_notification(
-            notification_type="request_accepted",
-            ragpicker_name=ragpicker_name
-        )
-        
-        # Get wallet addresses for blockchain integration
-        customer_wallet = None
-        customer_details_result = await db.execute(select(CustomerDetails).where(CustomerDetails.clerkId == request.customer_clerkId))
-        customer_details = customer_details_result.scalars().first()
-        if customer_details:
-            customer_wallet = customer_details.wallet_address
-        
-        ragpicker_wallet = None
-        ragpicker_details_result = await db.execute(select(RagpickerDetails).where(RagpickerDetails.clerkId == request.ragpicker_clerkId))
-        ragpicker_details = ragpicker_details_result.scalars().first()
-        if ragpicker_details:
-            ragpicker_wallet = ragpicker_details.wallet_address
+    try:
+        if request_update.status == "ACCEPTED":
+            logger.info(f"Sending notification to customer that request {request_id} was accepted")
+            # Notify customer that request was accepted
+            await twilio_service.send_notification(
+                notification_type="request_accepted",
+                ragpicker_name=ragpicker_name,
+                request_id=str(request_id),
+                customer_address=customer_address or "No address provided"
+            )
             
-        return RequestResponse(
-            id=request.id,
-            customer_clerkId=request.customer_clerkId,
-            ragpicker_clerkId=request.ragpicker_clerkId,
-            status=request.status,
-            smart_contract_address=request.smart_contract_address,
-            created_at=request.created_at,
-            updated_at=request.updated_at,
-            customer_name=customer_name,
-            ragpicker_name=ragpicker_name,
-            customer_address=customer_address,
-            customer_wallet_address=customer_wallet,
-            ragpicker_wallet_address=ragpicker_wallet
-        )
-    elif request_update.status == "REJECTED":
-        await twilio_service.send_notification(
-            notification_type="request_rejected"
-        )
+            # Get wallet addresses for blockchain integration
+            customer_wallet = None
+            customer_details_result = await db.execute(select(CustomerDetails).where(CustomerDetails.clerkId == request.customer_clerkId))
+            customer_details = customer_details_result.scalars().first()
+            if customer_details:
+                customer_wallet = customer_details.wallet_address
+            
+            ragpicker_wallet = None
+            ragpicker_details_result = await db.execute(select(RagpickerDetails).where(RagpickerDetails.clerkId == request.ragpicker_clerkId))
+            ragpicker_details = ragpicker_details_result.scalars().first()
+            if ragpicker_details:
+                ragpicker_wallet = ragpicker_details.wallet_address
+                
+            return RequestResponse(
+                id=request.id,
+                customer_clerkId=request.customer_clerkId,
+                ragpicker_clerkId=request.ragpicker_clerkId,
+                status=request.status,
+                smart_contract_address=request.smart_contract_address,
+                created_at=request.created_at,
+                updated_at=request.updated_at,
+                customer_name=customer_name,
+                ragpicker_name=ragpicker_name,
+                customer_address=customer_address,
+                customer_wallet_address=customer_wallet,
+                ragpicker_wallet_address=ragpicker_wallet
+            )
+        elif request_update.status == "REJECTED":
+            logger.info(f"Sending notification to customer that request {request_id} was rejected")
+            # Notify customer that request was rejected
+            await twilio_service.send_notification(
+                notification_type="request_rejected",
+                ragpicker_name=ragpicker_name,
+                request_id=str(request_id),
+                customer_name=customer_name
+            )
+    except Exception as e:
+        logger.error(f"Failed to send notification for status update: {str(e)}")
     
     return RequestResponse(
         id=request.id,
@@ -187,13 +206,6 @@ async def update_smart_contract(request_id: int, contract_data: SmartContractUpd
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Request with ID {request_id} not found"
-        )
-    
-    # Check if request status is ACCEPTED
-    if request.status != "ACCEPTED":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Smart contract can only be added to ACCEPTED requests"
         )
     
     # Update smart contract address
@@ -326,14 +338,30 @@ async def complete_request(request_id: int, db: AsyncSession = Depends(get_db)):
         customer_address = user_details.address
     
     # Send notification to both parties
-    await twilio_service.send_notification(
-        notification_type="request_completed"
-    )
-    
-    await twilio_service.send_notification(
-        notification_type="balance_updated",
-        balance=str(ragpicker_balance.balance)
-    )
+    try:
+        logger.info(f"Sending completion notifications for request {request_id}")
+        
+        # Notify customer that request is completed
+        await twilio_service.send_notification(
+            notification_type="request_completed_customer",
+            request_id=str(request_id),
+            ragpicker_name=ragpicker_name,
+            amount=str(transfer_amount),
+            new_balance=str(customer_balance.balance)
+        )
+        
+        # Notify ragpicker that request is completed and payment received
+        await twilio_service.send_notification(
+            notification_type="request_completed_ragpicker",
+            request_id=str(request_id),
+            customer_name=customer_name,
+            amount=str(transfer_amount),
+            new_balance=str(ragpicker_balance.balance)
+        )
+        
+        logger.info("Completion notifications sent successfully")
+    except Exception as e:
+        logger.error(f"Failed to send completion notifications: {str(e)}")
     
     return RequestResponse(
         id=request.id,
