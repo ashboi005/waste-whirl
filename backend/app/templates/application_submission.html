@@ -1,10 +1,9 @@
-<!-- app/templates/application_submission.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ragpicker Application</title>
+    <title>Application Submission</title>
     <style>
         :root {
             --primary: #4CAF50;
@@ -206,6 +205,17 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Validate Clerk ID
+            const clerkId = localStorage.getItem('clerkId');
+            const expiry = localStorage.getItem('clerkId_expiry');
+            
+            if (!clerkId || !expiry || Date.now() > parseInt(expiry)) {
+                localStorage.removeItem('clerkId');
+                localStorage.removeItem('clerkId_expiry');
+                window.location.href = '/';
+                return;
+            }
+
             const form = document.getElementById('applicationForm');
             const fileInput = document.getElementById('documentInput');
             const dropArea = document.getElementById('dropArea');
@@ -219,14 +229,14 @@
             let base64String = '';
             let fileExtension = '';
 
-            // Handle file selection
+            // File handling
             fileInput.addEventListener('change', function(e) {
                 if (e.target.files.length) {
                     handleFile(e.target.files[0]);
                 }
             });
 
-            // Drag and drop functionality
+            // Drag and drop
             dropArea.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 dropArea.style.borderColor = '#4CAF50';
@@ -248,14 +258,11 @@
                 }
             });
 
-            // Click on drop area triggers file input
             dropArea.addEventListener('click', () => {
                 fileInput.click();
             });
 
-            // Handle the selected file
             function handleFile(file) {
-                // Validate file type and size
                 const validTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
                 const maxSize = 5 * 1024 * 1024; // 5MB
                 
@@ -310,15 +317,10 @@
                 submitBtn.disabled = true;
                 
                 try {
-                    const clerkId = await getClerkUserId();
-                    
-                    // Determine API base URL based on environment
                     const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
                     const API_BASE = isProduction 
-                        ? 'https://ohmsi5xapc.execute-api.ap-south-1.amazonaws.com/Prod'
+                        ? 'https://your-api-domain.com' 
                         : 'http://localhost:8000';
-                        
-                    console.log('Using API URL for application submission:', API_BASE);
                     
                     const response = await fetch(`${API_BASE}/admin/applications/`, {
                         method: 'POST',
@@ -341,12 +343,10 @@
                         throw new Error(data.detail || 'Application submission failed');
                     }
                     
-                    showSuccess('Application submitted successfully!');
-                    form.reset();
-                    fileInfo.textContent = 'No file selected';
-                    preview.style.display = 'none';
-                    selectedFile = null;
-                    base64String = '';
+                    // Clear storage and redirect
+                    localStorage.removeItem('clerkId');
+                    localStorage.removeItem('clerkId_expiry');
+                    window.location.href = '/confirmation.html';
                 } catch (error) {
                     console.error('Error:', error);
                     showError(error.message);
@@ -362,20 +362,9 @@
                 statusMessage.style.display = 'block';
             }
 
-            function showSuccess(message) {
-                statusMessage.textContent = message;
-                statusMessage.className = 'status success';
-                statusMessage.style.display = 'block';
-            }
-
-            // Mock Clerk functions - replace with actual implementations
-            async function getClerkUserId() {
-                // Replace with actual Clerk user ID retrieval
-                return 'string';
-            }
-
+            // Mock Clerk token function - replace with actual implementation
             async function getClerkToken() {
-                // Replace with actual Clerk token retrieval
+                // In a real implementation, you would get this from your auth system
                 return 'mock_token';
             }
         });
