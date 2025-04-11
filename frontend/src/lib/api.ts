@@ -69,6 +69,9 @@ export interface Review {
   customer_name?: string
   ragpicker_name?: string
 }
+
+
+
 export async function updateRequestSmartContract(
     requestId: number,
     smart_contract_address: string
@@ -282,14 +285,19 @@ export async function getRequest(requestId: number): Promise<Request> {
 
 export async function updateRequestStatus(
   requestId: number,
-  status: "PENDING" | "ACCEPTED" | "REJECTED" | "COMPLETED",
+  status: "ACCEPTED" | "REJECTED" | "COMPLETED"
 ): Promise<Request> {
-  const response = await fetch(`${API_BASE_URL}/requests/${requestId}`, {
+  const response = await fetch(`${API_BASE_URL}/requests/${requestId}/status`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
   })
-  if (!response.ok) throw new Error("Failed to update request status")
+
+  if (!response.ok) {
+    throw new Error(`Failed to update request status: ${response.status} ${response.statusText}`)
+  }
+
+  // Returns the updated request object
   return response.json()
 }
 
