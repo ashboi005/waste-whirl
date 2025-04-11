@@ -264,14 +264,24 @@
                 }
 
                 try {
-                    // Update RFID in your database
+                    console.log(`Assigning RFID ${rfid} to application ${appId}`);
+                    // Update RFID in your database with proper format
                     const response = await fetch(`${API_BASE}/admin/ragpickers/${appId}/rfid`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ rfid })
+                        body: JSON.stringify({ rfid: rfid })
                     });
 
-                    if (!response.ok) throw new Error('RFID assignment failed');
+                    console.log(`Response status: ${response.status}`);
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error(`RFID assignment error: ${errorText}`);
+                        throw new Error(`RFID assignment failed: ${errorText}`);
+                    }
+                    
+                    const result = await response.json();
+                    console.log('RFID assignment result:', result);
                     
                     alert('RFID assigned successfully!');
                     document.querySelector(`[data-id="${appId}"]`).remove();
