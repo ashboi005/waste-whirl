@@ -19,8 +19,8 @@ previous_state = None
 def send_data_to_backend(state):
     # Create the payload in JSON format with sensor_id and status
     payload = {
-        "status": state,
-        "sensor_id": "Bin1"
+        "sensor_id": "Bin1",
+        "status": state
     }
     
     try:

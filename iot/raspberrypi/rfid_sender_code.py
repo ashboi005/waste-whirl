@@ -4,7 +4,7 @@ import requests
 from mfrc522 import SimpleMFRC522
 
 # Define your backend URL where the data should be sent
-backend_url = "https://ohmsi5xapc.execute-api.ap-south-1.amazonaws.com/Prod/sensors/rfid"  # Replace with your URL
+backend_url = "https://jrwbl2n7-8000.inc1.devtunnels.ms/sensors/rfid"  # Replace with your URL
 
 # Function to send data to your backend
 def send_data_to_backend(rfid_data):
