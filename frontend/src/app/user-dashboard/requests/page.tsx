@@ -9,9 +9,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getCustomerRequests, updateRequestStatus } from "@/lib/api"
-import type { Request } from "@/lib/api"
+import type { Request as BaseRequest } from "@/lib/api"
 import type { JSX } from "react/jsx-runtime"
 import { toast } from "@/hooks/use-toast" // <-- Make sure you have this hook imported
+
+// Extend the Request interface to include smart_contract_address
+interface Request extends BaseRequest {
+  smart_contract_address?: string;
+}
 
 // Minimal ABI for calling confirmCompletion() on RagJob
 const RagJobABI = [
